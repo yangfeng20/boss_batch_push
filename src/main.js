@@ -31,7 +31,7 @@ const companyScale = "20-10000000";
  * 投递多少页，每页默认有30个job，筛选过后不知道
  * @type {number}
  */
-const pushPageCount = 5;
+const pushPageCount = 100;
 
 
 /**
