@@ -16,7 +16,7 @@
  * @companyArr: 公司名
  * @companyExclude: 排除公司名
  * @jobNameArr: job名
- * @salaryRange:薪资范围
+ * @salaryRange: 薪资范围
  * @companyScale: 公司规模范围
  *
  */
@@ -31,7 +31,7 @@ const companyScale = "20-10000000";
  * 投递多少页，每页默认有30个job，筛选过后不知道
  * @type {number}
  */
-const pushPageCount = 2;
+const pushPageCount = 5;
 
 
 /**
@@ -103,7 +103,14 @@ let pushCount = 0;
         GM_setValue("lock", false)
         // 关闭当前table页
         console.log("关闭页面")
-        setTimeout(() => window.close(), 200)
+        setTimeout(() => {
+            // 沟通限制对话框
+            const limitDialog = document.querySelector(".dialog-container");
+            if (limitDialog) {
+                GM_setValue("limit", true)
+            }
+            window.close()
+        }, 200)
     }
 
     /**
@@ -135,6 +142,12 @@ let pushCount = 0;
                     await sleep(500);
                 }
 
+                if (GM_getValue("limit", false)) {
+                    pushCount--;
+                    console.log("今日沟通已达boss限制")
+                    break;
+                }
+
                 // 当前table页是活跃的，也是另外一遍点击立即沟通之后，以及关闭页面
                 await new Promise(resolve => setTimeout(resolve, delay));
                 GM_setValue("lock", false)
@@ -143,10 +156,11 @@ let pushCount = 0;
                 job.click();
             }
 
-            if (currentPage >= pushPageCount) {
+            if (currentPage >= pushPageCount || GM_getValue("limit", false)) {
                 console.log("一共", pushPageCount, "页")
                 console.log("共投递", pushCount, "份")
                 console.log("投递完毕")
+                clear()
                 return;
             }
 
@@ -161,6 +175,11 @@ let pushCount = 0;
         clickJobList(document.querySelectorAll('.job-card-wrapper'), 2000);
     };
 
+    function clear() {
+        GM_setValue("lock", false)
+        GM_setValue("limit", false)
+        GM_setValue("enable", false)
+    }
 
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
