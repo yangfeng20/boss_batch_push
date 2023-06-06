@@ -246,8 +246,27 @@ let pushCount = 0;
             return;
         }
 
+        /**
+         * 招聘boss是否活跃
+         */
+        const isBossActive = () => {
+            const activeEle = document.querySelector(".boss-active-time")
+            if (!activeEle) {
+                return true;
+            }
+
+            const activeText = activeEle.innerText;
+            return !(activeText.includes("月") || activeText.includes("年"));
+        }
+
+        // boss是否活跃，过滤不活跃boss
+        if (!isBossActive()) {
+            console.log("过滤不活跃boss")
+            return;
+        }
+
         // 立即沟通或者继续沟通按钮
-        const handler_button = document.getElementsByClassName("btn btn-startchat")[0];
+        const handler_button = document.querySelector(".btn-startchat");
         if (handler_button.innerText.includes("立即沟通")) {
             // 如果是沟通按钮则点击
             console.log("点击立即沟通")
@@ -314,6 +333,7 @@ let pushCount = 0;
 
             if (currentPage >= pushPageCount || GM_getValue("limit", false)) {
                 console.log("一共", pushPageCount, "页")
+                // todo 不能统计在job详情页跳过不活跃的boss,如果使用GM_getValue代价比较大，频繁更新
                 console.log("共投递", pushCount, "份")
                 console.log("投递完毕")
                 clear()
