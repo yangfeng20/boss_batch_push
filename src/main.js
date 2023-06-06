@@ -272,7 +272,6 @@ let pushCount = 0;
      * 用于批量打开job详情
      */
     const batchHandler = () => {
-        debugger
         // 每次投递加载最新的配置
         loadConfig();
         console.log("开始批量投递,当前页数：", ++currentPage)
@@ -377,7 +376,6 @@ let pushCount = 0;
      * @returns {boolean}
      */
     const matchJob = (job) => {
-        debugger
         // 公司名
         const companyName = job.querySelector(".company-name").innerText
         // 工作名
@@ -450,7 +448,7 @@ let pushCount = 0;
             // 如果当前元素包含指定值，则返回 true
             let arrEleStr = arr[i].toLowerCase();
             if (arrEleStr.length === 0) {
-                emptyStatus = true;
+                emptyEle = true;
                 continue;
             }
             if (arrEleStr.includes(input) || input.includes(arrEleStr)) {
