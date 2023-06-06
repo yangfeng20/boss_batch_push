@@ -20,11 +20,11 @@
  * @companyScale: 公司规模范围
  *
  */
-const companyArr = [];
-const companyExclude = ["华为", "盒马"];
-const jobNameArr = ["软件", "Java", "后端", "服务端", "开发", "后台"];
-const salaryRange = "12-15";
-const companyScale = "20-10000000";
+let companyArr = [];
+let companyExclude = [];
+let jobNameArr = [];
+let salaryRange = "";
+let companyScale = "";
 
 
 /**
@@ -44,20 +44,35 @@ let pushCount = 0;
 (function () {
     'use strict';
 
+    let loadConfig;
+    let saveConfig;
+
     /**
-     * list页面添加批量操作按钮
-     * 已经重置脚本开关按钮
+     * jobList页面处理逻辑
+     * 添加操作按钮，注册点击事件，加载持久化配置
      */
-    const addButton = () => {
+    const jobListHandler = () => {
+
+        // 批量投递按钮
         const batchButton = document.createElement('button');
         batchButton.innerText = '批量投递';
         batchButton.addEventListener('click', batchHandler);
 
+        // 重置开关按钮
         const resetButton = document.createElement('button');
         resetButton.innerText = '重置开关';
         resetButton.addEventListener('click', () => {
             GM_setValue("enable", false)
             console.log("重置脚本开关成功")
+            window.alert("重置脚本开关成功")
+        });
+
+        // 保存配置按钮
+        const saveButton = document.createElement('button');
+        saveButton.innerText = '保存配置';
+        saveButton.addEventListener('click', () => {
+            saveConfig();
+            window.alert("保存配置成功")
         });
 
         const addStyle = (button) => {
@@ -71,22 +86,161 @@ let pushCount = 0;
         }
         addStyle(batchButton)
         addStyle(resetButton)
+        addStyle(saveButton)
 
-
+        // 等待页面元素渲染，然后加载配置并渲染页面
         setTimeout(() => {
+            // 读取配置
+            initConfig()
             const container = document.querySelector('.job-list-wrapper');
             const firstJob = container.firstElementChild;
             container.insertBefore(resetButton, firstJob);
             container.insertBefore(batchButton, firstJob);
+            container.insertBefore(saveButton, firstJob);
         }, 1000)
     };
+
+    const initConfig = () => {
+
+        // 加载持久化的配置，并加载到内存
+        const config = JSON.parse(GM_getValue("config", "{}"))
+        companyArr = companyArr.concat(config.companyArr)
+        companyExclude = companyExclude.concat(config.companyExclude)
+        jobNameArr = jobNameArr.concat(config.jobNameArr)
+        salaryRange = config.salaryRange ? config.salaryRange : salaryRange
+        companyScale = config.companyScale ? config.companyScale : companyScale
+
+        // 将配置渲染到页面
+        renderConfigText()
+
+        /**
+         * 渲染配置输入框
+         * 将用户配置渲染到页面
+         * 同时将钩子函数赋值！！！
+         */
+        function renderConfigText() {
+            const bossInput = document.createElement("div");
+            bossInput.id = "boss-input";
+
+            const companyLabel1 = document.createElement("label");
+            companyLabel1.textContent = "公司名包含";
+            const companyArr_ = document.createElement("input");
+            companyArr_.type = "text";
+            companyArr_.id = "companyArr";
+            companyLabel1.appendChild(companyArr_);
+            bossInput.appendChild(companyLabel1);
+            companyArr_.value = deWeight(companyArr).join(",")
+
+            const companyLabel2 = document.createElement("label");
+            companyLabel2.textContent = "公司名排除";
+            const companyExclude_ = document.createElement("input");
+            companyExclude_.type = "text";
+            companyExclude_.id = "companyExclude";
+            companyLabel2.appendChild(companyExclude_);
+            bossInput.appendChild(companyLabel2);
+            companyExclude_.value = deWeight(companyExclude).join(",")
+
+            const jobNameLabel = document.createElement("label");
+            jobNameLabel.textContent = "Job名包含";
+            const jobNameArr_ = document.createElement("input");
+            jobNameArr_.type = "text";
+            jobNameArr_.id = "jobNameArr";
+            jobNameLabel.appendChild(jobNameArr_);
+            bossInput.appendChild(jobNameLabel);
+            jobNameArr_.value = deWeight(jobNameArr).join(",")
+
+            const salaryLabel = document.createElement("label");
+            salaryLabel.textContent = "薪资范围";
+            const salaryRange_ = document.createElement("input");
+            salaryRange_.type = "text";
+            salaryRange_.id = "salaryRange";
+            salaryLabel.appendChild(salaryRange_);
+            bossInput.appendChild(salaryLabel);
+            salaryRange_.value = salaryRange
+
+            const companyScaleLabel = document.createElement("label");
+            companyScaleLabel.textContent = "公司规模范围";
+            const companyScale_ = document.createElement("input");
+            companyScale_.type = "text";
+            companyScale_.id = "companyScale";
+            companyScaleLabel.appendChild(companyScale_);
+            bossInput.appendChild(companyScaleLabel);
+            companyScale_.value = companyScale
+
+            // 美化样式
+            bossInput.style.margin = "20px";
+            bossInput.style.padding = "20px";
+            bossInput.style.border = "1px solid #ccc";
+            bossInput.style.background = "#f0f0f0";
+            bossInput.style.borderRadius = "10px";
+            bossInput.style.width = "80%";
+
+            const labels = bossInput.querySelectorAll("label");
+            labels.forEach(label => {
+                label.style.display = "inline-block";
+                label.style.width = "20%";
+                label.style.fontWeight = "bold";
+            });
+
+            const inputs = bossInput.querySelectorAll("input[type='text']");
+            inputs.forEach(input => {
+                input.style.marginLeft = "10px";
+                input.style.width = "70%";
+                input.style.padding = "5px";
+                input.style.borderRadius = "5px";
+                input.style.border = "1px solid #ccc";
+                input.style.boxSizing = "border-box";
+            });
+
+            // 将创建好的元素添加到 DOM 中
+            const container = document.querySelector('.job-list-wrapper');
+            const firstJob = container.firstElementChild;
+            container.insertBefore(bossInput, firstJob);
+
+            /**
+             * 每次批量提交前，加载页面最新的配置
+             */
+            loadConfig = () => {
+                companyArr = companyArr_.value.split(",")
+                companyExclude = companyExclude_.value.split(",")
+                jobNameArr = jobNameArr_.value.split(",")
+                salaryRange = salaryRange_.value
+                companyScale = companyScale_.value = companyScale
+            }
+
+            /**
+             * 持久化用户输入的配置
+             */
+            saveConfig = () => {
+                const config = {
+                    companyArr: companyArr_.value.split(","),
+                    companyExclude: companyExclude_.value.split(","),
+                    jobNameArr: jobNameArr_.value.split(","),
+                    salaryRange: salaryRange_.value,
+                    companyScale: companyScale_.value = companyScale,
+                }
+                // 持久化配置
+                GM_setValue("config", JSON.stringify(config))
+            }
+        }
+
+        function deWeight(arr) {
+            let uniqueArr = [];
+            for (let i = 0; i < arr.length; i++) {
+                if (uniqueArr.indexOf(arr[i]) === -1) {
+                    uniqueArr.push(arr[i]);
+                }
+            }
+            return uniqueArr;
+        }
+    }
 
 
     /**
      * 详情页面注册load事件
      * 点击job详情的立即沟通
      */
-    const job_detail_handler = () => {
+    const jobDetailHandler = () => {
         if (!GM_getValue("enable", false)) {
             console.log("未开启脚本开关")
             return;
@@ -118,6 +272,9 @@ let pushCount = 0;
      * 用于批量打开job详情
      */
     const batchHandler = () => {
+        debugger
+        // 每次投递加载最新的配置
+        loadConfig();
         console.log("开始批量投递,当前页数：", ++currentPage)
         GM_setValue("enable", true)
 
@@ -171,7 +328,7 @@ let pushCount = 0;
 
         }
 
-        // 每隔1秒执行一次点击操作
+        // 每隔2秒执行一次点击操作
         clickJobList(document.querySelectorAll('.job-card-wrapper'), 2000);
     };
 
@@ -220,6 +377,7 @@ let pushCount = 0;
      * @returns {boolean}
      */
     const matchJob = (job) => {
+        debugger
         // 公司名
         const companyName = job.querySelector(".company-name").innerText
         // 工作名
@@ -286,14 +444,25 @@ let pushCount = 0;
             return emptyStatus;
         }
         input = input.toLowerCase();
+        let emptyEle = false;
         // 遍历数组中的每个元素
         for (let i = 0; i < arr.length; i++) {
             // 如果当前元素包含指定值，则返回 true
             let arrEleStr = arr[i].toLowerCase();
+            if (arrEleStr.length === 0) {
+                emptyStatus = true;
+                continue;
+            }
             if (arrEleStr.includes(input) || input.includes(arrEleStr)) {
                 return true;
             }
         }
+
+        // 所有元素均为空元素【返回空状态】
+        if (emptyEle) {
+            return emptyStatus;
+        }
+
         // 如果没有找到匹配的元素，则返回 false
         return false;
     }
@@ -309,13 +478,12 @@ let pushCount = 0;
         const detail_url = "job_detail";
 
         if (document.URL.includes(list_url)) {
-            window.addEventListener('load', addButton);
+            window.addEventListener('load', jobListHandler);
         } else if (document.URL.includes(detail_url)) {
-            window.addEventListener('load', job_detail_handler);
+            window.addEventListener('load', jobDetailHandler);
         }
     }
 
     main();
-
 
 })();
