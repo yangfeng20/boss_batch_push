@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
+// @namespace    maple
 // @version      1.0.0
 // @author       maple.
 // @license      Apache License 2.0
