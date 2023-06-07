@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Boss Batch Push
+// @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @version      1.0.0
 // @author       maple.
@@ -341,7 +341,7 @@ const BATCH_ENABLE = "enable";
             setTimeout(() => {
                 // 沟通限制对话框
                 const limitDialog = document.querySelector(".dialog-container");
-                if (limitDialog) {
+                if (limitDialog && !limitDialog.innerText.includes("已向BOSS发送消息")) {
                     GM_setValue(PUSH_LIMIT, true)
                 }
                 GM_setValue(PUSH_LOCK, false)
@@ -420,8 +420,15 @@ const BATCH_ENABLE = "enable";
                 return;
             }
 
-            console.log("下一页")
             const nextButton = document.querySelector(".ui-icon-arrow-right")
+            // 没有下一页
+            if (nextButton.parentElement.className === "disabled") {
+                window.alert("共投递" + GM_getValue(PUSH_COUNT, 0) + "份，没有更多符合条件的工作")
+                clear();
+                return;
+            }
+
+            console.log("下一页")
             nextButton.click()
             setTimeout(() => batchHandler(), 2000);
 
@@ -436,7 +443,7 @@ const BATCH_ENABLE = "enable";
         if (!GM_getValue(ACTIVE_ENABLE, false)) {
             return new Promise(resolve => resolve())
         }
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const timer = setInterval(() => {
                 if (GM_getValue(ACTIVE_ENABLE, false) && GM_getValue(ACTIVE_READY, false)) {
                     clearInterval(timer);
@@ -497,7 +504,7 @@ const BATCH_ENABLE = "enable";
                     console.log("过滤不活跃bossJob：" + jobTitle)
                     return
                 }
-                console.log("添加活跃job：" + activeText)
+                console.log("添加活跃bossJob：" + jobTitle)
                 result.push(job);
             }).catch(e => {
                 console.log(e)
