@@ -3,7 +3,7 @@
 // @description  boss直聘批量简历投递
 // @version      1.0.0
 // @author       maple.
-// @license      AGPL-3.0-or-later
+// @license      Apache License 2.0
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
