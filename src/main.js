@@ -4,6 +4,7 @@
 // @version      1.0.0
 // @author       maple.
 // @license      AGPL-3.0-or-later
+// @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_listValues
@@ -39,7 +40,18 @@ const pushPageCount = 100;
  * @type {number}
  */
 let currentPage = 0;
-let pushCount = 0;
+
+/**
+ * 本地存储key
+ */
+const ACTIVE_READY = "activeReady";
+const ACTIVE_ENABLE = "activeEnable";
+const LOCAL_CONFIG = "config";
+const PUSH_COUNT = "pushCount";
+const PUSH_LOCK = "lock";
+const PUSH_LIMIT = "limit";
+const BATCH_ENABLE = "enable";
+
 
 (function () {
     'use strict';
@@ -53,6 +65,9 @@ let pushCount = 0;
      */
     const jobListHandler = () => {
 
+        // 重置逻辑状态，可能由于执行过程的中断导致状态错乱
+        resetStatus()
+
         // 批量投递按钮
         const batchButton = document.createElement('button');
         batchButton.innerText = '批量投递';
@@ -62,7 +77,7 @@ let pushCount = 0;
         const resetButton = document.createElement('button');
         resetButton.innerText = '重置开关';
         resetButton.addEventListener('click', () => {
-            GM_setValue("enable", false)
+            GM_setValue(BATCH_ENABLE, false)
             console.log("重置脚本开关成功")
             window.alert("重置脚本开关成功")
         });
@@ -74,6 +89,10 @@ let pushCount = 0;
             saveConfig();
             window.alert("保存配置成功")
         });
+
+        // 过滤不活跃boss按钮
+        const switchButton = document.createElement('button');
+
 
         const addStyle = (button) => {
             button.style.display = "inline-block";
@@ -87,6 +106,27 @@ let pushCount = 0;
         addStyle(batchButton)
         addStyle(resetButton)
         addStyle(saveButton)
+        addStyle(switchButton)
+
+        let switchState = false;
+        const setSwitchButtonState = (isOpen) => {
+            switchState = isOpen;
+            if (isOpen) {
+                switchButton.innerText = '过滤不活跃Boss:已开启';
+                switchButton.style.backgroundColor = '#67c23a';
+                GM_setValue(ACTIVE_ENABLE, true)
+            } else {
+                switchButton.innerText = '过滤不活跃Boss:已关闭';
+                switchButton.style.backgroundColor = '#f56c6c';
+                GM_setValue(ACTIVE_ENABLE, false)
+            }
+        };
+        setSwitchButtonState(GM_getValue(ACTIVE_ENABLE, true))
+
+        // 添加事件监听，执行回调函数
+        switchButton.addEventListener('click', () => {
+            setSwitchButtonState(!switchState);
+        });
 
         // 等待页面元素渲染，然后加载配置并渲染页面
         setTimeout(() => {
@@ -97,13 +137,19 @@ let pushCount = 0;
             container.insertBefore(resetButton, firstJob);
             container.insertBefore(batchButton, firstJob);
             container.insertBefore(saveButton, firstJob);
+            container.insertBefore(switchButton, firstJob);
         }, 1000)
     };
+
+    const resetStatus = () => {
+        GM_setValue(PUSH_COUNT, 0)
+        GM_setValue(PUSH_LIMIT, false)
+    }
 
     const initConfig = () => {
 
         // 加载持久化的配置，并加载到内存
-        const config = JSON.parse(GM_getValue("config", "{}"))
+        const config = JSON.parse(GM_getValue(LOCAL_CONFIG, "{}"))
         companyArr = companyArr.concat(config.companyArr)
         companyExclude = companyExclude.concat(config.companyExclude)
         jobNameArr = jobNameArr.concat(config.jobNameArr)
@@ -220,7 +266,7 @@ let pushCount = 0;
                     companyScale: companyScale_.value = companyScale,
                 }
                 // 持久化配置
-                GM_setValue("config", JSON.stringify(config))
+                GM_setValue(LOCAL_CONFIG, JSON.stringify(config))
             }
         }
 
@@ -241,7 +287,7 @@ let pushCount = 0;
      * 点击job详情的立即沟通
      */
     const jobDetailHandler = () => {
-        if (!GM_getValue("enable", false)) {
+        if (!GM_getValue(BATCH_ENABLE, false)) {
             console.log("未开启脚本开关")
             return;
         }
@@ -259,31 +305,38 @@ let pushCount = 0;
             return !(activeText.includes("月") || activeText.includes("年"));
         }
 
+        // 关闭页面并重置对应状态
+        const closeTab = (ms) => {
+            console.log("关闭页面")
+            setTimeout(() => {
+                // 沟通限制对话框
+                const limitDialog = document.querySelector(".dialog-container");
+                if (limitDialog) {
+                    GM_setValue(PUSH_LIMIT, true)
+                }
+                GM_setValue(PUSH_LOCK, false)
+                window.close()
+            }, ms)
+        }
+
         // boss是否活跃，过滤不活跃boss
         if (!isBossActive()) {
             console.log("过滤不活跃boss")
+            closeTab(0)
             return;
         }
 
         // 立即沟通或者继续沟通按钮
-        const handler_button = document.querySelector(".btn-startchat");
-        if (handler_button.innerText.includes("立即沟通")) {
+        const handlerButton = document.querySelector(".btn-startchat");
+        if (handlerButton.innerText.includes("立即沟通")) {
             // 如果是沟通按钮则点击
             console.log("点击立即沟通")
-            handler_button.click()
+            handlerButton.click()
+            // 更新投递次数，可能存在性能问题
+            GM_setValue(PUSH_COUNT, GM_getValue(PUSH_COUNT, 0) + 1)
         }
 
-        GM_setValue("lock", false)
-        // 关闭当前table页
-        console.log("关闭页面")
-        setTimeout(() => {
-            // 沟通限制对话框
-            const limitDialog = document.querySelector(".dialog-container");
-            if (limitDialog) {
-                GM_setValue("limit", true)
-            }
-            window.close()
-        }, 200)
+        closeTab(300)
     }
 
     /**
@@ -294,47 +347,44 @@ let pushCount = 0;
         // 每次投递加载最新的配置
         loadConfig();
         console.log("开始批量投递,当前页数：", ++currentPage)
-        GM_setValue("enable", true)
+        GM_setValue(BATCH_ENABLE, true)
 
         async function clickJobList(jobList, delay) {
             // 过滤只留下立即沟通的job
             jobList = filterJob(jobList);
+            await activeWait()
             console.log("过滤后的job数量", jobList.length, "默认30")
-
             for (let i = 0; i < jobList.length; i++) {
                 const job = jobList[i];
                 let innerText = job.querySelector(".job-title").innerText;
                 const jobTitle = innerText.replace("\n", " ");
 
-                const lock = GM_getValue("lock", false)
+                const lock = GM_getValue(PUSH_LOCK, false)
                 while (true) {
                     if (!lock) {
                         console.log("解锁---" + jobTitle)
                         break;
                     }
-                    console.log("阻塞等待---" + jobTitle)
+                    console.log("等待---" + jobTitle)
                     // 每500毫秒检查一次状态
                     await sleep(500);
                 }
 
-                if (GM_getValue("limit", false)) {
-                    pushCount--;
+                if (GM_getValue(PUSH_LIMIT, false)) {
                     console.log("今日沟通已达boss限制")
                     break;
                 }
 
                 // 当前table页是活跃的，也是另外一遍点击立即沟通之后，以及关闭页面
                 await new Promise(resolve => setTimeout(resolve, delay));
-                GM_setValue("lock", false)
+                GM_setValue(PUSH_LOCK, false)
                 console.log("加锁---" + jobTitle)
-                pushCount++;
                 job.click();
             }
 
-            if (currentPage >= pushPageCount || GM_getValue("limit", false)) {
+            if (currentPage >= pushPageCount || GM_getValue(PUSH_LIMIT, false)) {
                 console.log("一共", pushPageCount, "页")
-                // todo 不能统计在job详情页跳过不活跃的boss,如果使用GM_getValue代价比较大，频繁更新
-                console.log("共投递", pushCount, "份")
+                console.log("共投递", GM_getValue(PUSH_COUNT, 0), "份")
                 console.log("投递完毕")
                 clear()
                 return;
@@ -351,10 +401,26 @@ let pushCount = 0;
         clickJobList(document.querySelectorAll('.job-card-wrapper'), 2000);
     };
 
+    async function activeWait() {
+        // 未开启活跃度检查
+        if (!GM_getValue(ACTIVE_ENABLE, false)) {
+            return new Promise(resolve => resolve())
+        }
+        return new Promise((resolve, reject) => {
+            const timer = setInterval(() => {
+                if (GM_getValue(ACTIVE_ENABLE, false) && GM_getValue(ACTIVE_READY, false)) {
+                    clearInterval(timer);
+                    resolve();
+                }
+                console.log("阻塞中---------", GM_getValue(ACTIVE_ENABLE, false), GM_getValue(ACTIVE_READY, false))
+            }, 1000);
+        });
+    }
+
     function clear() {
-        GM_setValue("lock", false)
-        GM_setValue("limit", false)
-        GM_setValue("enable", false)
+        GM_setValue(PUSH_LOCK, false)
+        GM_setValue(PUSH_LIMIT, false)
+        GM_setValue(BATCH_ENABLE, false)
     }
 
     function sleep(ms) {
@@ -368,21 +434,49 @@ let pushCount = 0;
      */
     const filterJob = (job_list) => {
         const result = [];
+        let requestCount = 0;
         for (let i = 0; i < job_list.length; i++) {
             let job = job_list[i];
             let innerText = job.querySelector(".job-title").innerText;
             const jobTitle = innerText.replace("\n", " ");
 
-            // 匹配符号条件的job
+            // 匹配符合条件的Job
             if (!matchJob(job)) {
                 console.log("跳过不匹配的job：", jobTitle)
                 continue;
             }
 
             const jobStatusStr = job.querySelector(".start-chat-btn").innerText;
-            if (jobStatusStr.includes("立即沟通")) {
-                result.push(job);
+            if (!jobStatusStr.includes("立即沟通")) {
+                continue;
             }
+
+            // 打开boss活跃度开关时，需要检查boss活跃度
+            if (!GM_getValue(ACTIVE_ENABLE, false)) {
+                // 未打开boss活跃度开关
+                result.push(job);
+                continue
+            }
+
+            // 活跃度检查【如果是活跃才添加到result中】
+            requestCount++;
+            const params = job.querySelector(".job-card-left").href.split("?")[1]
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params).then(resp => {
+                const activeText = resp.data.zpData.jobCard.activeTimeDesc
+                if ((activeText.includes("月") || activeText.includes("年"))) {
+                    console.log("过滤不活跃bossJob：" + jobTitle)
+                    return
+                }
+                console.log("添加活跃job：" + activeText)
+                result.push(job);
+            }).catch(e => {
+                console.log(e)
+            }).finally(() => {
+                requestCount--;
+                if (requestCount === 0) {
+                    GM_setValue(ACTIVE_READY, true)
+                }
+            })
         }
         return result;
     }
