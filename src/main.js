@@ -12,6 +12,20 @@
 // ==/UserScript==
 
 
+const docTextArr = [
+    "1.批量投递：点击批量投递开始批量投简历，请先通过上方Boss的筛选功能筛选大致的范围，然后通过脚本的筛选进一步确认投递目标。",
+    "2.重置开关：如果你需要自己浏览工作详情页面，请点击该按钮关闭自动投递。如果不关闭，打开工作详情页，会自动投递并关闭页面。",
+    "3.保存配置：保持下方脚本筛选项，用于后续直接使用当前配置。",
+    "4.过滤不活跃Boss：打开后会自动过滤掉最近未活跃的Boss发布的工作。以免浪费每天的100次机会。",
+    "脚本筛选项介绍：",
+    "公司名包含：投递工作的公司名一定包含在当前集合中，模糊匹配，多个使用逗号分割。这个一般不用，如果使用了也就代表只投这些公司的岗位。例子：【阿里,华为】",
+    "排除公司名：投递工作的公司名一定不在当前集合中，也就是排除当前集合中的公司，模糊匹配，多个使用逗号分割。例子：【xxx外包】",
+    "Job名包含：投递工作的名称一定包含在当前集合中，模糊匹配，多个使用逗号分割。例如：【软件,Java,后端,服务端,开发,后台】",
+    "薪资范围：投递工作的薪资范围一定在当前区间中，一定是区间，使用-连接范围。例如：【12-20】",
+    "公司规模范围：投递工作的公司人员范围一定在当前区间中，一定是区间，使用-连接范围。例如：【500-20000000】",
+]
+
+
 /**
  * 以下名称均为模糊匹配
  * @companyArr: 公司名
@@ -29,7 +43,7 @@ let companyScale = "";
 
 
 /**
- * 投递多少页，每页默认有30个job，筛选过后不知道
+ * 投递多少页，每页默认有30个job，筛选过后不确定
  * @type {number}
  */
 const pushPageCount = 100;
@@ -134,12 +148,28 @@ const BATCH_ENABLE = "enable";
             initConfig()
             const container = document.querySelector('.job-list-wrapper');
             const firstJob = container.firstElementChild;
-            container.insertBefore(resetButton, firstJob);
+            container.insertBefore(addDocComponent(), firstJob);
             container.insertBefore(batchButton, firstJob);
+            container.insertBefore(resetButton, firstJob);
             container.insertBefore(saveButton, firstJob);
             container.insertBefore(switchButton, firstJob);
         }, 1000)
     };
+
+    const addDocComponent = () => {
+        const docDiv = document.createElement("div");
+        docDiv.style.backgroundColor = "#f2f2f2";
+        docDiv.style.padding = "5px";
+        docDiv.style.width = "100%";
+        for (let i = 0; i < docTextArr.length; i++) {
+            const textTag = document.createElement("p");
+            textTag.style.color = "#666";
+            textTag.innerHTML = docTextArr[i];
+            docDiv.appendChild(textTag)
+        }
+
+        return docDiv;
+    }
 
     const resetStatus = () => {
         GM_setValue(PUSH_COUNT, 0)
