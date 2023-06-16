@@ -294,7 +294,7 @@ const BATCH_ENABLE = "enable";
                     companyExclude: companyExclude_.value.split(","),
                     jobNameArr: jobNameArr_.value.split(","),
                     salaryRange: salaryRange_.value,
-                    companyScale: companyScale_.value = companyScale,
+                    companyScale: companyScale_.value,
                 }
                 // 持久化配置
                 GM_setValue(LOCAL_CONFIG, JSON.stringify(config))
@@ -450,7 +450,7 @@ const BATCH_ENABLE = "enable";
                     clearInterval(timer);
                     resolve();
                 }
-                console.log("阻塞中---------", GM_getValue(ACTIVE_ENABLE, false), GM_getValue(ACTIVE_READY, false))
+                console.log("等待检查Job活跃度阻塞中---------", GM_getValue(ACTIVE_ENABLE, false), GM_getValue(ACTIVE_READY, false))
             }, 1000);
         });
     }
@@ -486,6 +486,7 @@ const BATCH_ENABLE = "enable";
 
             const jobStatusStr = job.querySelector(".start-chat-btn").innerText;
             if (!jobStatusStr.includes("立即沟通")) {
+                console.log("跳过沟通过的Job：", jobTitle)
                 continue;
             }
 
@@ -539,7 +540,7 @@ const BATCH_ENABLE = "enable";
 
         // 模糊匹配
         const companyNameCondition = fuzzyMatch(companyArr, companyName, true)
-        const companyNameExclude = fuzzyMatch(companyExclude, companyName, true)
+        const companyNameExclude = fuzzyMatch(companyExclude, companyName, false)
         const jobNameCondition = fuzzyMatch(jobNameArr, jobName, true)
 
         // 范围匹配
