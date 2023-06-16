@@ -386,8 +386,6 @@ const BATCH_ENABLE = "enable";
             await activeWait()
             console.log("过滤后的job数量", jobList.length, "默认30")
 
-
-            debugger
             for (let i = 0; i < jobList.length; i++) {
                 const job = jobList[i];
                 let innerText = job.querySelector(".job-title").innerText;
