@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.0.0
+// @version      1.0.1
 // @author       maple.
 // @license      Apache License 2.0
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
