@@ -385,6 +385,9 @@ const BATCH_ENABLE = "enable";
             jobList = filterJob(jobList);
             await activeWait()
             console.log("过滤后的job数量", jobList.length, "默认30")
+
+
+            debugger
             for (let i = 0; i < jobList.length; i++) {
                 const job = jobList[i];
                 let innerText = job.querySelector(".job-title").innerText;
@@ -500,7 +503,7 @@ const BATCH_ENABLE = "enable";
             // 活跃度检查【如果是活跃才添加到result中】
             requestCount++;
             const params = job.querySelector(".job-card-left").href.split("?")[1]
-            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params).then(resp => {
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 2000}).then(resp => {
                 const activeText = resp.data.zpData.jobCard.activeTimeDesc
                 if ((activeText.includes("月") || activeText.includes("年"))) {
                     console.log("过滤不活跃bossJob：" + jobTitle)
@@ -509,6 +512,7 @@ const BATCH_ENABLE = "enable";
                 console.log("添加活跃bossJob：" + jobTitle)
                 result.push(job);
             }).catch(e => {
+                console.log("检查活跃度失败,原因")
                 console.log(e)
             }).finally(() => {
                 requestCount--;
