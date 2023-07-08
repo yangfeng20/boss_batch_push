@@ -2,13 +2,12 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple,Ocyss
-// @version      1.1.2
+// @version      1.1.3
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_listValues
 // @grant        GM_addValueChangeListener
 // @match        https://www.zhipin.com/*
 // ==/UserScript==
@@ -51,7 +50,7 @@ let salaryRange = ""; //薪资范围
 let companyScale = ""; //公司规模范围
 
 /**
- * 投递多少个，每页默认有30个job，筛选过后不确定
+ * 投递多少页，每页默认有30个job，筛选过后不确定
  * @type {number}
  */
 const pushPageCount = 100;
@@ -61,9 +60,11 @@ const pushPageCount = 100;
  * @type {number}
  */
 let currentPage = 0;
+let currentUrl = "";
 let iframeEl, toolEl;
 let loadConfig, saveConfig;
 let runT = false;
+const pageRe = /(?<=page=)\d*/;
 /**
  * 本地存储key
  */
@@ -88,10 +89,25 @@ const batchHandler = (el) => {
       }
       // 每次投递加载最新的配置
       loadConfig();
-      console.log("开始批量投递,当前页数：", ++currentPage);
+      const upPage = ()=>{
+        currentUrl = window.location.href;
+        currentPage = pageRe.exec(currentUrl);
+        currentPage = currentPage === null ? 1 : parseInt(currentPage[0])
+      }
+      const nextPage= ()=>{
+        upPage()
+        if (currentPage==1){
+          window.location.href = currentUrl + "&page=2"
+        }else{
+          window.location.href = currentUrl.replace(pageRe,++currentPage)
+        }
+      }
+      upPage()
+      console.log("开始批量投递,当前页数：", currentPage);
       GM_setValue(BATCH_ENABLE, true);
 
       async function clickJobList(jobList, delay) {
+        upPage()
         // 过滤只留下立即沟通的job
         jobList = filterJob(jobList);
         await activeWait();
@@ -101,13 +117,18 @@ const batchHandler = (el) => {
           const job = jobList[i];
           let innerText = job.querySelector(".job-title").innerText;
           const jobTitle = innerText.replace("\n", " ");
-
+          let count = 0;
           while (true) {
             if (!GM_getValue(PUSH_LOCK, false)) {
               console.log("解锁---" + jobTitle);
               break;
             }
+            if (count >= 30){
+                console.log("异常(超时)---" + jobTitle);
+                break;
+            }
             console.log("等待---" + jobTitle);
+            count++
             // 每300毫秒检查一次状态
             await sleep(300);
           }
@@ -153,7 +174,7 @@ const batchHandler = (el) => {
           clear();
           return;
         }
-
+        //nextPage()
         console.log("下一页,开始等待8秒钟");
         nextButton.click();
         setTimeout(() => runbatch(), 8000);
@@ -302,7 +323,8 @@ function jobDetailHandler() {
   // boss是否活跃，过滤不活跃boss
   if (!isBossActive()) {
     console.log("过滤不活跃boss");
-    // closeTab(0);
+    //closeTab(0);
+    GM_setValue(PUSH_LOCK, false);
     return;
   }
 
@@ -402,7 +424,7 @@ function filterJob(job_list) {
     const companyNameExclude = fuzzyMatch(companyExclude, companyName, false);
     const jobNameCondition = fuzzyMatch(jobNameArr, jobName, true);
     const salaryRangeCondition =
-      rangeMatch(salaryRange, salary) || rangeMatch(salaryRange, salary, 30); //时薪也算进去,不100%准确
+      rangeMatch(salaryRange, salary) || rangeMatch(salaryRange, salary, 38); //单休日薪，有小误差
     const companyScaleCondition = rangeMatch(companyScale, companyScale_);
 
     return (
@@ -718,8 +740,9 @@ function configEl() {
 
 (function () {
   const list_url = "web/geek/job";
+  const recommend_url = "web/geek/recommend";
   const detail_url = "job_detail";
-  if (document.URL.includes(list_url)) {
+  if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
     window.addEventListener("load", jobListHandler);
   } else if (document.URL.includes(detail_url)) {
     window.addEventListener("load", jobDetailHandler);
