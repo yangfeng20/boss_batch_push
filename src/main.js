@@ -2,14 +2,21 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple,Ocyss
-// @version      1.1.3
+// @version      1.1.4
 // @author       maple,Ocyss
 // @license      Apache License 2.0
+// @run-at       document-start
+// @match        https://www.zhipin.com/*
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
+// @require      https://scriptcat.org/lib/637/1.3.1/ajaxHooker.js
+// @include      https://www.zhipin.com
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
 // @grant        GM_addValueChangeListener
-// @match        https://www.zhipin.com/*
+// @grant        GM_cookie
+// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 const docTextArr = [
@@ -64,6 +71,7 @@ let currentUrl = "";
 let iframeEl, toolEl;
 let loadConfig, saveConfig;
 let runT = false;
+let curId;
 const pageRe = /(?<=page=)\d*/;
 /**
  * 本地存储key
@@ -76,6 +84,24 @@ const PUSH_LOCK = "lock";
 const PUSH_LIMIT = "limit";
 const BATCH_ENABLE = "enable";
 const RUN_DATE = "rundate"; // 上一次运行时间,不一样就清空COUNT
+const ID_CUR = "cueId"; // 当前id,兼任考虑，第一个是"",第二个是"_"
+const ID_LIST = "idList"; // id列表
+
+function GmSetValue(key, val) {
+  return GM_setValue(curId + key, val);
+}
+function GmGetValue(key, val) {
+  return GM_getValue(curId + key) || val;
+}
+function GmAddValueChangeListener(key, func) {
+  return GM_addValueChangeListener(curId + key, func);
+}
+
+const upPage = () => {
+  currentUrl = window.location.href;
+  currentPage = pageRe.exec(currentUrl);
+  currentPage = currentPage === null ? 1 : parseInt(currentPage[0]);
+};
 
 // 开始批量投递
 const batchHandler = (el) => {
@@ -89,25 +115,11 @@ const batchHandler = (el) => {
       }
       // 每次投递加载最新的配置
       loadConfig();
-      const upPage = ()=>{
-        currentUrl = window.location.href;
-        currentPage = pageRe.exec(currentUrl);
-        currentPage = currentPage === null ? 1 : parseInt(currentPage[0])
-      }
-      const nextPage= ()=>{
-        upPage()
-        if (currentPage==1){
-          window.location.href = currentUrl + "&page=2"
-        }else{
-          window.location.href = currentUrl.replace(pageRe,++currentPage)
-        }
-      }
-      upPage()
       console.log("开始批量投递,当前页数：", currentPage);
-      GM_setValue(BATCH_ENABLE, true);
+      GmSetValue(BATCH_ENABLE, true);
 
       async function clickJobList(jobList, delay) {
-        upPage()
+        //upPage()
         // 过滤只留下立即沟通的job
         jobList = filterJob(jobList);
         await activeWait();
@@ -119,21 +131,21 @@ const batchHandler = (el) => {
           const jobTitle = innerText.replace("\n", " ");
           let count = 0;
           while (true) {
-            if (!GM_getValue(PUSH_LOCK, false)) {
+            if (!GmGetValue(PUSH_LOCK, false)) {
               console.log("解锁---" + jobTitle);
               break;
             }
-            if (count >= 30){
-                console.log("异常(超时)---" + jobTitle);
-                break;
+            if (count >= 30) {
+              console.log("异常(超时)---" + jobTitle);
+              break;
             }
             console.log("等待---" + jobTitle);
-            count++
+            count++;
             // 每300毫秒检查一次状态
             await sleep(300);
           }
 
-          if (GM_getValue(PUSH_LIMIT, false)) {
+          if (GmGetValue(PUSH_LIMIT, false)) {
             console.log("今日沟通已达boss限制");
             window.alert(
               "今天已经不能在沟通了，愿你早日找到心满意足的工作，不要灰心，我一直与你同在~"
@@ -143,7 +155,7 @@ const batchHandler = (el) => {
 
           // 当前table页是活跃的，也是另外一遍点击立即沟通之后，以及关闭页面
           await new Promise((resolve) => setTimeout(resolve, delay)); // 等待 delay 秒
-          GM_setValue(PUSH_LOCK, true);
+          GmSetValue(PUSH_LOCK, true);
           console.log("加锁---" + jobTitle);
           // job.click();
           iframeEl.src = job.querySelector(".job-card-left").href;
@@ -152,31 +164,38 @@ const batchHandler = (el) => {
         if (
           !runT ||
           currentPage >= pushPageCount ||
-          GM_getValue(PUSH_LIMIT, false)
+          GmGetValue(PUSH_LIMIT, false)
         ) {
           console.log("一共", pushPageCount, "页");
-          console.log("共投递", GM_getValue(PUSH_COUNT, 0), "份");
+          console.log("共投递", GmGetValue(PUSH_COUNT, 0), "份");
           console.log("投递完毕");
           clear();
           return;
         }
 
-        const nextButton = document.querySelector(".ui-icon-arrow-right");
+        const nextButtonRight = document.querySelector(".ui-icon-arrow-right");
+        const nextButtonLeft = document.querySelector(".ui-icon-arrow-left");
         // 没有下一页
-        if (nextButton.parentElement.className === "disabled") {
-          let temp =
-            "共投递" +
-            GM_getValue(PUSH_COUNT, 0) +
-            "份，没有更多符合条件的工作";
-          window.alert(temp);
-          console.log(temp);
-          batchHandler(el);
-          clear();
-          return;
-        }
+        //if (nextButton.parentElement.className === "disabled") {
+        //  let temp =
+        //    "共投递" +
+        //    GmGetValue(PUSH_COUNT, 0) +
+        //    "份，没有更多符合条件的工作";
+        //  window.alert(temp);
+        //  console.log(temp);
+        //  batchHandler(el);
+        //  clear();
+        //  return;
+        //}
         //nextPage()
+        currentPage++;
         console.log("下一页,开始等待8秒钟");
-        nextButton.click();
+
+        if (nextButtonRight.parentElement.className === "disabled") {
+          nextButtonLeft.click();
+        } else {
+          nextButtonRight.click();
+        }
         setTimeout(() => runbatch(), 8000);
       }
 
@@ -188,7 +207,7 @@ const batchHandler = (el) => {
     runT = false;
     el.style.backgroundColor = "#409eff";
     el.innerText = "批量投递";
-    GM_setValue(BATCH_ENABLE, true);
+    GmSetValue(BATCH_ENABLE, true);
   }
 };
 
@@ -208,7 +227,7 @@ const jobListHandler = () => {
   const resetButton = document.createElement("button");
   resetButton.innerText = "重置开关";
   resetButton.addEventListener("click", () => {
-    GM_setValue(BATCH_ENABLE, false);
+    GmSetValue(BATCH_ENABLE, false);
     console.log("重置脚本开关成功");
     window.alert("重置脚本开关成功");
   });
@@ -239,14 +258,14 @@ const jobListHandler = () => {
     if (isOpen) {
       switchButton.innerText = "过滤不活跃Boss:已开启";
       switchButton.style.backgroundColor = "#67c23a";
-      GM_setValue(ACTIVE_ENABLE, true);
+      GmSetValue(ACTIVE_ENABLE, true);
     } else {
       switchButton.innerText = "过滤不活跃Boss:已关闭";
       switchButton.style.backgroundColor = "#f56c6c";
-      GM_setValue(ACTIVE_ENABLE, false);
+      GmSetValue(ACTIVE_ENABLE, false);
     }
   };
-  setSwitchButtonState(GM_getValue(ACTIVE_ENABLE, true));
+  setSwitchButtonState(GmGetValue(ACTIVE_ENABLE, true));
   iframeEl = document.createElement("iframe");
   // 添加事件监听，执行回调函数
   switchButton.addEventListener("click", () => {
@@ -282,7 +301,7 @@ const jobListHandler = () => {
 
 // 详情页面处理
 function jobDetailHandler() {
-  if (!GM_getValue(BATCH_ENABLE, false)) {
+  if (!GmGetValue(BATCH_ENABLE, false)) {
     console.log("未开启脚本开关");
     return;
   }
@@ -309,13 +328,13 @@ function jobDetailHandler() {
       );
       if (limitDialog) {
         if (limitDialog.innerText.includes("人数已达上限")) {
-          GM_setValue(PUSH_LIMIT, true);
-        } else {
+          GmSetValue(PUSH_LIMIT, true);
+        } else if (limitDialog.innerText.includes("已向BOSS发送消息")) {
           // 更新投递次数，可能存在性能问题
-          GM_setValue(PUSH_COUNT, GM_getValue(PUSH_COUNT, 0) + 1);
+          GmSetValue(PUSH_COUNT, GmGetValue(PUSH_COUNT, 0) + 1);
         }
       }
-      GM_setValue(PUSH_LOCK, false);
+      GmSetValue(PUSH_LOCK, false);
       // window.close();
     }, ms);
   };
@@ -324,7 +343,7 @@ function jobDetailHandler() {
   if (!isBossActive()) {
     console.log("过滤不活跃boss");
     //closeTab(0);
-    GM_setValue(PUSH_LOCK, false);
+    GmSetValue(PUSH_LOCK, false);
     return;
   }
 
@@ -454,7 +473,7 @@ function filterJob(job_list) {
     }
 
     // 当没开启活跃度检查和工作内容筛选不进行网络请求
-    if (!GM_getValue(ACTIVE_ENABLE, false) && descriptionExclude.length == 0) {
+    if (!GmGetValue(ACTIVE_ENABLE, false) && descriptionExclude.length == 0) {
       // 未打开boss活跃度开关
       result.push(job);
       continue;
@@ -465,12 +484,12 @@ function filterJob(job_list) {
     const params = job.querySelector(".job-card-left").href.split("?")[1];
     axios
       .get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {
-        timeout: 2000,
+        timeout: 5000,
       })
       .then((resp) => {
         const activeText = resp.data.zpData.jobCard.activeTimeDesc;
         if (
-          GM_getValue(ACTIVE_ENABLE, false) &&
+          GmGetValue(ACTIVE_ENABLE, false) &&
           (activeText.includes("月") || activeText.includes("年"))
         ) {
           console.log("%c 过滤不活跃的Job：" + jobTitle, "color:#F8FD5A;");
@@ -478,6 +497,9 @@ function filterJob(job_list) {
         }
         const content = resp.data.zpData.jobCard.postDescription;
         for (let i = 0; i < descriptionExclude.length; i++) {
+          if (!descriptionExclude[i]) {
+            continue;
+          }
           let re = new RegExp(
             "(?<!(不|无).{0,5})" +
               descriptionExclude[i] +
@@ -504,7 +526,7 @@ function filterJob(job_list) {
       .finally(() => {
         requestCount--;
         if (requestCount === 0) {
-          GM_setValue(ACTIVE_READY, true);
+          GmSetValue(ACTIVE_READY, true);
         }
       });
   }
@@ -514,22 +536,19 @@ function filterJob(job_list) {
 // 活跃度检查
 async function activeWait() {
   // 未开启活跃度检查
-  if (!GM_getValue(ACTIVE_ENABLE, false)) {
+  if (!GmGetValue(ACTIVE_ENABLE, false)) {
     return new Promise((resolve) => resolve());
   }
   return new Promise((resolve) => {
     const timer = setInterval(() => {
-      if (
-        GM_getValue(ACTIVE_ENABLE, false) &&
-        GM_getValue(ACTIVE_READY, false)
-      ) {
+      if (GmGetValue(ACTIVE_ENABLE, false) && GmGetValue(ACTIVE_READY, false)) {
         clearInterval(timer);
         resolve();
       }
       console.log(
         "等待检查Job活跃度阻塞中---------",
-        GM_getValue(ACTIVE_ENABLE, false),
-        GM_getValue(ACTIVE_READY, false)
+        GmGetValue(ACTIVE_ENABLE, false),
+        GmGetValue(ACTIVE_READY, false)
       );
     }, 1000);
   });
@@ -538,11 +557,11 @@ async function activeWait() {
 // 重置
 function resetStatus() {
   const d = new Date();
-  if (GM_getValue(RUN_DATE, -1) != d.toDateString()) {
+  if (GmGetValue(RUN_DATE, -1) != d.toDateString()) {
     window.caches;
-    GM_setValue(PUSH_COUNT, 0);
-    GM_setValue(PUSH_LIMIT, false);
-    GM_setValue(RUN_DATE, d.toDateString());
+    GmSetValue(PUSH_COUNT, 0);
+    GmSetValue(PUSH_LIMIT, false);
+    GmSetValue(RUN_DATE, d.toDateString());
     console.log(
       "%c Hi,今天又是新的一天咯，元气满满找工作~也愿这是你我最后一次相遇🥳",
       "color:red;font-size:36px;"
@@ -553,9 +572,9 @@ function resetStatus() {
 // 清理
 function clear() {
   runT = false;
-  GM_setValue(PUSH_LOCK, false);
-  GM_setValue(PUSH_LIMIT, false);
-  GM_setValue(BATCH_ENABLE, false);
+  GmSetValue(PUSH_LOCK, false);
+  GmSetValue(PUSH_LIMIT, false);
+  GmSetValue(BATCH_ENABLE, false);
 }
 
 // 等待
@@ -569,7 +588,7 @@ function docEl() {
   const docDiv = document.createElement("div");
   const title = document.createElement("h2");
   Div.style.cssText = "overflow:hidden;height:32px;";
-  title.textContent = `Boos直聘投递助手(${GM_getValue(PUSH_COUNT, 0)}次)`;
+  title.textContent = `Boos直聘投递助手(${GmGetValue(PUSH_COUNT, 0)}次)`;
   title.style.cursor = "pointer";
   // 折叠功能(低能版)
   title.addEventListener("click", () => {
@@ -603,7 +622,7 @@ function docEl() {
   });
 
   // 增加观察者，实时修改(性能?不管~)
-  GM_addValueChangeListener(
+  GmAddValueChangeListener(
     PUSH_COUNT,
     function (name, old_value, new_value, remote) {
       title.textContent = `Boos直聘投递助手(${new_value}次)`;
@@ -615,7 +634,7 @@ function docEl() {
 // 配置元素生成
 function configEl() {
   // 加载持久化的配置，并加载到内存
-  const config = JSON.parse(GM_getValue(LOCAL_CONFIG, "{}"));
+  const config = JSON.parse(GmGetValue(LOCAL_CONFIG, "{}"));
   companyArr = companyArr.concat(config.companyArr);
   companyExclude = companyExclude.concat(config.companyExclude);
   descriptionExclude = descriptionExclude.concat(config.descriptionExclude);
@@ -720,7 +739,7 @@ function configEl() {
         companyScale: companyScale_.value,
       };
       // 持久化配置
-      GM_setValue(LOCAL_CONFIG, JSON.stringify(config));
+      GmSetValue(LOCAL_CONFIG, JSON.stringify(config));
     };
     return bossInput;
   }
@@ -738,11 +757,93 @@ function configEl() {
   return renderConfigText();
 }
 
+GM_registerMenuCommand("切换Ck", async () => {
+  let value = GM_getValue(ID_LIST) || [];
+  GM_cookie("list", {}, async (list, error) => {
+    if (error === undefined) {
+      console.log(list, value);
+      // 储存覆盖老的值
+      GM_setValue(ID_LIST, list);
+      // 先清空 再设置
+      for (let i = 0; i < list.length; i++) {
+        list[i].url = window.location.origin;
+        await GM_cookie("delete", list[i]);
+      }
+      if (value.length) {
+        // 循环set
+        for (let i = 0; i < value.length; i++) {
+          value[i].url = window.location.origin;
+          await GM_cookie("set", value[i]);
+        }
+      }
+      if (GM_getValue(ID_CUR, "") === "") {
+        GM_setValue(ID_CUR, "_");
+      } else {
+        GM_setValue(ID_CUR, "");
+      }
+      window.location.reload();
+      // window.alert("手动刷新～");
+    } else {
+      window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+    }
+  });
+});
+
+GM_registerMenuCommand("清除当前Ck", () => {
+  if (GM_getValue(ID_CUR, "") === "_") {
+    GM_setValue(ID_CUR, "");
+  }
+  GM_cookie("list", {}, async (list, error) => {
+    if (error === undefined) {
+      // 清空
+      for (let i = 0; i < list.length; i++) {
+        list[i].url = window.location.origin;
+        // console.log(list[i]);
+        await GM_cookie("delete", list[i]);
+      }
+
+      window.location.reload();
+    } else {
+      window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+    }
+  });
+});
+
+GM_registerMenuCommand("清空所有存储!", async () => {
+  if (confirm("将清空脚本全部的设置!!")) {
+    const asyncKeys = await GM_listValues();
+    for (let index in asyncKeys) {
+      console.log(asyncKeys[index]);
+      await GM_deleteValue(asyncKeys[index]);
+    }
+    window.alert("OK!");
+  }
+});
+
 (function () {
   const list_url = "web/geek/job";
   const recommend_url = "web/geek/recommend";
   const detail_url = "job_detail";
+  curId = GM_getValue(ID_CUR, null);
   if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
+    upPage();
+    ajaxHooker.filter([
+      { type: "xhr", url: "wapi/zpgeek/search/joblist.json", method: "GET" },
+      // 下面放需要拦截的uri,减少开支
+      // { url: ".png" },
+    ]);
+    // 直接拦截请求url,修改page,实现无限下一页
+    //ps:nt的限制最多30个，不然直接请求1000个了～
+    ajaxHooker.hook((request) => {
+      if (
+        request.url.includes("wapi/zpgeek/search/joblist.json") &&
+        request.method === "GET"
+      ) {
+        request.url = request.url.replace(/(?<=page=)\d*/, currentPage);
+      } else {
+        request.abort = true;
+      }
+    });
     window.addEventListener("load", jobListHandler);
   } else if (document.URL.includes(detail_url)) {
     window.addEventListener("load", jobDetailHandler);
