@@ -557,7 +557,8 @@ async function activeWait() {
 // 重置
 function resetStatus() {
   const d = new Date();
-  if (GmGetValue(RUN_DATE, -1) != d.toDateString()) {
+  GM_setValue(PUSH_LIMIT, false);
+  if (GM_getValue(RUN_DATE, -1) != d.toDateString()) {
     window.caches;
     GmSetValue(PUSH_COUNT, 0);
     GmSetValue(PUSH_LIMIT, false);
