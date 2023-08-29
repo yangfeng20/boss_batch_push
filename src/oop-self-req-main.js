@@ -855,6 +855,7 @@ class JobListPageHandler {
             failCount: 0,
         }
         let jobList = BossDOMApi.getJobList();
+        logger.debug("jobList", jobList)
 
         let process = Array.from(jobList).reduce((promiseChain, jobTag) => {
             let jobTitle = BossDOMApi.getJobTitle(jobTag);
@@ -883,6 +884,7 @@ class JobListPageHandler {
 
                         case error instanceof PublishLimitExp:
                             TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LIMIT, true);
+                            logger.error("投递停止; 原因：" + error.message);
                             throw new PublishStopExp(error.message)
 
                         case error instanceof PublishStopExp:
@@ -966,6 +968,10 @@ class JobListPageHandler {
                 return resolve()
             }
 
+            if (result.message.includes("今日沟通人数已达上限")) {
+                return reject(new PublishLimitExp(result.message))
+            }
+
             return reject(new SendPublishExp(result.message))
         })
     }
@@ -1019,11 +1025,11 @@ class JobListPageHandler {
                 // 投递请求
                 axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
                     .then(resp => {
-                        if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.title) {
+                        if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.content) {
                             // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
                             return resolve({
                                 code: 1,
-                                message: resp.data?.zpData?.bizData?.chatRemindDialog?.title
+                                message: resp.data?.zpData?.bizData?.chatRemindDialog?.content
                             })
                         }
 
