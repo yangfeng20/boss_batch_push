@@ -8,7 +8,7 @@
 // @run-at       document-start
 // @match        https://www.zhipin.com/*
 // @include      https://www.zhipin.com
-// @require      https://unpkg.com/maple-lib@1.0.2/log.js
+// @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
