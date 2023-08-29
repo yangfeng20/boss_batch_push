@@ -569,6 +569,8 @@ class ScriptConfig extends TampermonkeyApi {
     static SCRIPT_ENABLE = "script_enable";
     static ACTIVE_ENABLE = "activeEnable";
     static PUSH_LIMIT = "push_limit";
+    // 投递锁是否被占用，可重入；value表示当前正在投递的job
+    static PUSH_LOCK = "push_lock";
 
     // 公司名包含输入框lab
     static cnInKey = "companyNameInclude"
@@ -782,19 +784,20 @@ class JobListPageHandler {
         this.scriptConfig = this.operationPanel.scriptConfig
         this.operationPanel.init()
         this.publishState = false
-        this.publishStop = false
         this.nextPage = false
+        this.mock = false
     }
 
     /**
      * 点击批量投递事件处理
      */
     batchPushHandler() {
-        this.publishStop = false
         this.changeBatchPublishState(!this.publishState);
         if (!this.publishState) {
             return;
         }
+        // 每次投递前清空投递锁，未被占用
+        TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
         // 每次读取操作面板中用户实时输入的值
         this.operationPanel.readInputConfig()
 
@@ -813,12 +816,14 @@ class JobListPageHandler {
             }
             clearInterval(nextPageTask)
 
-            if (this.publishStop) {
-                logger.info("投递结束，异常结束")
+            if (!this.publishState) {
+                logger.info("投递结束")
+                this.changeBatchPublishState(!this.publishState);
                 return;
             }
             if (!BossDOMApi.nextPage()) {
                 logger.info("投递结束，没有下一页")
+                this.changeBatchPublishState(!this.publishState);
                 return;
             }
 
@@ -826,7 +831,7 @@ class JobListPageHandler {
             setTimeout(() => {
                 this.loopPublish()
             }, 1000)
-        }, 10000);
+        }, 3000);
     }
 
     changeBatchPublishState(publishState) {
@@ -838,7 +843,7 @@ class JobListPageHandler {
     filterCurPageAndPush() {
         this.nextPage = false;
         let notMatchCount = 0;
-        let publishResult = {
+        let publishResultCount = {
             successCount: 0,
             failCount: 0,
         }
@@ -850,34 +855,48 @@ class JobListPageHandler {
                 .then(() => this.reqJobDetail(jobTag))
                 .then((securityId, jobContent) => this.jobDetailFilter(jobTag, securityId, jobContent))
                 .then(securityId => this.sendPublishReq(jobTag, securityId))
-                .then(publishResult => this.handlerPublishResult(publishResult, publishResult))
+                .then(publishResult => this.handlerPublishResult(jobTag, publishResult, publishResultCount))
                 .catch(error => {
-                    if (error instanceof JobNotMatchExp) {
-                        ++notMatchCount;
-                        return;
-                    } else if (error instanceof PublishLimitExp) {
-                        this.publishStop = true;
-                        TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LIMIT, true)
-                        return;
-                    } else if (error instanceof FetchJobDetailFailExp) {
+                    // 在catch中return是结束当前元素，不会结束整个promiseChain；
+                    // 需要结束整个promiseChain，在catch throw exp,但还会继续执行下一个元素catch中的逻辑
+                    switch (true) {
+                        case error instanceof JobNotMatchExp:
+                            ++notMatchCount;
+                            break;
 
-                    } else if (error instanceof SendPublishExp) {
+                        case error instanceof FetchJobDetailFailExp:
+                            // 处理 FetchJobDetailFailExp 的逻辑
+                            logger.error("job详情页数据获取失败：" + error);
+                            break;
 
-                    } else if (error instanceof PublishStopExp) {
-                        // 结束投递
-                        return;
+                        case error instanceof SendPublishExp:
+                            logger.error("投递失败;原因：" + error.message);
+                            publishResultCount.failCount++
+                            break;
+
+                        case error instanceof PublishLimitExp:
+                            TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LIMIT, true);
+                            throw new PublishStopExp(error.message)
+
+                        case error instanceof PublishStopExp:
+                            // 结束整个投递链路
+                            throw error;
+                        default:
+                            logger.debug(BossDOMApi.getDetailSrc(jobTag) + "-->未捕获投递异常:", error);
                     }
-                    logger.debug(BossDOMApi.getDetailSrc(jobTag) + "-->投递异常:", error)
                 })
-        }, Promise.resolve());
+        }, Promise.resolve()).catch(error => {
+            // 这里只是让报错不显示，不需要处理异常
+
+        });
 
 
         // 当前页jobList中所有job处理完毕执行
-        process.then(() => {
+        process.finally(() => {
             logger.info("当前页投递完毕---------------------------------------------------")
             logger.info("不满足条件的job数量：" + notMatchCount)
-            logger.info("投递Job成功数量：" + publishResult.successCount)
-            logger.info("投递Job失败数量：" + publishResult.failCount)
+            logger.info("投递Job成功数量：" + publishResultCount.successCount)
+            logger.info("投递Job失败数量：" + publishResultCount.failCount)
             logger.info("当前页投递完毕---------------------------------------------------")
             this.nextPage = true;
         })
@@ -895,7 +914,6 @@ class JobListPageHandler {
                 timeout: 5000,
             }).then(resp => {
                 let htmlParseParams = Tools.htmlParseParams(resp.data);
-                logger.debug(BossDOMApi.getJobTitle(jobTag) + "-->工作内容\n:" + htmlParseParams.jobContent)
                 axios.get("https://www.zhipin.com/wapi/zpchat/config/get").then(() => {
                     // 获取工作内容，交给下一个过滤器
                     return resolve(htmlParseParams.securityId, htmlParseParams.jobContent);
@@ -921,30 +939,31 @@ class JobListPageHandler {
         })
     }
 
-    handlerPublishResult(result, publishResult) {
+    handlerPublishResult(jobTag, result, publishResultCount) {
         return new Promise((resolve, reject) => {
             if (result.message === 'Success' && result.code === 0) {
                 // 增加投递数量，触发投递监听，更新页面投递计数
                 ScriptConfig.pushCountIncr()
-                publishResult.successCount++
+                publishResultCount.successCount++
+                logger.info("投递成功：" + BossDOMApi.getJobTitle(jobTag))
                 return resolve()
             }
 
-            publishResult.failCount++
-            return reject(result)
+            return reject(new SendPublishExp(result.message))
         })
     }
 
-    sendPublishReq(jobTag, securityId, retries = 3) {
+    sendPublishReq(jobTag, securityId, errorMsg, retries = 3) {
+        let jobTitle = BossDOMApi.getJobTitle(jobTag);
         if (retries === 3) {
-            logger.debug(BossDOMApi.getJobTitle(jobTag) + " -->正在投递")
+            logger.debug("正在投递：" + jobTitle)
         }
         return new Promise((resolve, reject) => {
             if (retries === 0) {
-                return reject(new SendPublishExp());
+                return reject(new SendPublishExp(errorMsg));
             }
             if (!this.publishState) {
-                return reject(new PublishStopExp())
+                return reject(new PublishStopExp("停止投递"))
             }
 
             // 检查投递限制
@@ -953,20 +972,52 @@ class JobListPageHandler {
                 return reject(new PublishLimitExp("boss投递限制每天100次"))
             }
 
+            if (this.mock) {
+                let result = {
+                    message: 'Success',
+                    code: 0
+                }
+                return resolve(result)
+            }
+
             let src = BossDOMApi.getDetailSrc(jobTag);
             let publishUrl = "https://www.zhipin.com/wapi/zpgeek/friend/add.json"
             let paramObj = Tools.parseURL(src);
             // securityId重新赋值，需要详情页的securityId【事实证明不是securityId，而是header中需要有Zp_token】但是难得改了
             paramObj.securityId = securityId
             let url = Tools.queryString(publishUrl, paramObj);
-            axios.post(url, null, {
-                headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}
-            }).then(resp => {
-                return resolve(resp.data);
-            }).catch(error => {
-                logger.debug("投递异常正在重试:", error)
-                return this.sendPublishReq(jobTag, securityId, retries - 1)
-            })
+
+
+            let pushLockTask = setInterval(() => {
+                if (!this.publishState) {
+                    clearInterval(pushLockTask)
+                    return reject(new PublishStopExp())
+                }
+                let lock = TampermonkeyApi.GmGetValue(ScriptConfig.PUSH_LOCK, "");
+                if (lock && lock !== jobTitle) {
+                    return logger.debug("投递锁被其他job占用：" + lock)
+                }
+                // 停止锁检查并占用投递锁
+                clearInterval(pushLockTask)
+                TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, jobTitle)
+                logger.debug("锁定投递锁：" + jobTitle)
+
+                // 投递请求
+                axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
+                    .then(resp => {
+                        if (resp.data.code !== 0) {
+                            throw new SendPublishExp(resp.data.message)
+                        }
+                        return resolve(resp.data);
+                    }).catch(error => {
+                    logger.debug("投递异常正在重试:" + jobTitle, error)
+                    return resolve(this.sendPublishReq(jobTag, securityId, error.message, retries - 1))
+                }).finally(() => {
+                    // 释放投递锁
+                    logger.debug("释放投递锁：" + jobTitle)
+                    TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
+                })
+            }, 500);
         })
     }
 
