@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.1.4
+// @version      1.1.5
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -818,12 +818,12 @@ class JobListPageHandler {
 
             if (!this.publishState) {
                 logger.info("投递结束")
-                this.changeBatchPublishState(!this.publishState);
+                this.changeBatchPublishState(false);
                 return;
             }
             if (!BossDOMApi.nextPage()) {
                 logger.info("投递结束，没有下一页")
-                this.changeBatchPublishState(!this.publishState);
+                this.changeBatchPublishState(false);
                 return;
             }
 
@@ -850,6 +850,7 @@ class JobListPageHandler {
         let jobList = BossDOMApi.getJobList();
 
         let process = Array.from(jobList).reduce((promiseChain, jobTag) => {
+            let jobTitle = BossDOMApi.getJobTitle(jobTag);
             return promiseChain
                 .then(() => this.matchJobPromise(jobTag))
                 .then(() => this.reqJobDetail(jobTag))
@@ -865,12 +866,11 @@ class JobListPageHandler {
                             break;
 
                         case error instanceof FetchJobDetailFailExp:
-                            // 处理 FetchJobDetailFailExp 的逻辑
                             logger.error("job详情页数据获取失败：" + error);
                             break;
 
                         case error instanceof SendPublishExp:
-                            logger.error("投递失败;原因：" + error.message);
+                            logger.error("投递失败;" + jobTitle + " 原因：" + error.message);
                             publishResultCount.failCount++
                             break;
 
@@ -984,7 +984,7 @@ class JobListPageHandler {
             let publishUrl = "https://www.zhipin.com/wapi/zpgeek/friend/add.json"
             let paramObj = Tools.parseURL(src);
             // securityId重新赋值，需要详情页的securityId【事实证明不是securityId，而是header中需要有Zp_token】但是难得改了
-            paramObj.securityId = securityId
+            // paramObj.securityId = securityId
             let url = Tools.queryString(publishUrl, paramObj);
 
 
@@ -1005,6 +1005,14 @@ class JobListPageHandler {
                 // 投递请求
                 axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
                     .then(resp => {
+                        if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.title) {
+                            // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
+                            return resolve({
+                                code: 1,
+                                message: resp.data?.zpData?.bizData?.chatRemindDialog?.title
+                            })
+                        }
+
                         if (resp.data.code !== 0) {
                             throw new SendPublishExp(resp.data.message)
                         }
