@@ -21,7 +21,7 @@
 
 "use strict";
 
-let logger = Logger.log("debug")
+let logger = Logger.log("info")
 
 class BossBatchExp extends Error {
     constructor(msg) {
@@ -180,6 +180,10 @@ class Tools {
         }
 
         return false;
+    }
+
+    static bossIsActive(activeText) {
+        return !(activeText.includes("月") || activeText.includes("年"));
     }
 
     static getRandomNumber(startMs, endMs) {
@@ -758,6 +762,9 @@ class BossDOMApi {
         return jobStatusStr.includes("立即沟通");
     }
 
+    static getJobDetailUrlParams(jobTag) {
+        return jobTag.querySelector(".job-card-left").href.split("?")[1]
+    }
 
     static getDetailSrc(jobTag) {
         return jobTag.querySelector(".job-card-left").href;
@@ -854,8 +861,8 @@ class JobListPageHandler {
             return promiseChain
                 .then(() => this.matchJobPromise(jobTag))
                 .then(() => this.reqJobDetail(jobTag))
-                .then((securityId, jobContent) => this.jobDetailFilter(jobTag, securityId, jobContent))
-                .then(securityId => this.sendPublishReq(jobTag, securityId))
+                .then(jobCardJson => this.jobDetailFilter(jobTag, jobCardJson))
+                .then(() => this.sendPublishReq(jobTag))
                 .then(publishResult => this.handlerPublishResult(jobTag, publishResult, publishResultCount))
                 .catch(error => {
                     // 在catch中return是结束当前元素，不会结束整个promiseChain；
@@ -909,32 +916,42 @@ class JobListPageHandler {
                 return reject(new FetchJobDetailFailExp());
             }
 
-            let src = BossDOMApi.getDetailSrc(jobTag);
-            axios.get(src, {
-                timeout: 5000,
-            }).then(resp => {
-                let htmlParseParams = Tools.htmlParseParams(resp.data);
-                axios.get("https://www.zhipin.com/wapi/zpchat/config/get").then(() => {
-                    // 获取工作内容，交给下一个过滤器
-                    return resolve(htmlParseParams.securityId, htmlParseParams.jobContent);
-                })
-            }).catch(error => {
+            let params = BossDOMApi.getJobDetailUrlParams(jobTag);
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 5000})
+                .then(resp => {
+                    return resolve(resp.data.zpData.jobCard);
+                }).catch(error => {
                 logger.debug("获取详情页异常正在重试:", error)
                 return this.reqJobDetail(jobTag, retries - 1)
             })
         })
     }
 
-    jobDetailFilter(jobTag, securityId, jobContent) {
-        let jobContentExclude = this.scriptConfig.getJobContentExclude(true);
+    jobDetailFilter(jobTag, jobCardJson) {
+        let jobTitle = BossDOMApi.getJobTitle(jobTag);
+
         return new Promise((resolve, reject) => {
-            if (!Tools.semanticMatch(jobContentExclude, jobContent)) {
+
+            // 工作详情活跃度检查
+            let activeCheck = TampermonkeyApi.GmGetValue(ScriptConfig.ACTIVE_ENABLE, true);
+            let activeTimeDesc = jobCardJson.activeTimeDesc;
+            if (activeCheck && !Tools.bossIsActive(activeTimeDesc)) {
+                logger.debug("当前boss活跃度：" + activeTimeDesc)
+                logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足活跃度检查")
+                return reject(new JobNotMatchExp())
+            }
+
+            // 工作内容检查
+            let jobContentExclude = this.scriptConfig.getJobContentExclude(true);
+            if (!Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)) {
+                logger.debug("当前job工作内容：" + jobCardJson.postDescription)
+                logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足工作内容")
                 return reject(new JobNotMatchExp())
             }
 
             setTimeout(() => {
                 // 获取不同的延时，避免后面投递时一起导致频繁
-                return resolve(securityId);
+                return resolve();
             }, Tools.getRandomNumber(100, 200))
         })
     }
@@ -953,7 +970,7 @@ class JobListPageHandler {
         })
     }
 
-    sendPublishReq(jobTag, securityId, errorMsg, retries = 3) {
+    sendPublishReq(jobTag, errorMsg, retries = 3) {
         let jobTitle = BossDOMApi.getJobTitle(jobTag);
         if (retries === 3) {
             logger.debug("正在投递：" + jobTitle)
@@ -981,12 +998,9 @@ class JobListPageHandler {
             }
 
             let src = BossDOMApi.getDetailSrc(jobTag);
-            let publishUrl = "https://www.zhipin.com/wapi/zpgeek/friend/add.json"
             let paramObj = Tools.parseURL(src);
-            // securityId重新赋值，需要详情页的securityId【事实证明不是securityId，而是header中需要有Zp_token】但是难得改了
-            // paramObj.securityId = securityId
+            let publishUrl = "https://www.zhipin.com/wapi/zpgeek/friend/add.json"
             let url = Tools.queryString(publishUrl, paramObj);
-
 
             let pushLockTask = setInterval(() => {
                 if (!this.publishState) {
@@ -1019,7 +1033,7 @@ class JobListPageHandler {
                         return resolve(resp.data);
                     }).catch(error => {
                     logger.debug("投递异常正在重试:" + jobTitle, error)
-                    return resolve(this.sendPublishReq(jobTag, securityId, error.message, retries - 1))
+                    return resolve(this.sendPublishReq(jobTag, error.message, retries - 1))
                 }).finally(() => {
                     // 释放投递锁
                     logger.debug("释放投递锁：" + jobTitle)
