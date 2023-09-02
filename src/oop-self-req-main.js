@@ -410,6 +410,9 @@ class OperationPanel {
         this.srInInputLab = salaryRangeInput
         this.csrInInputLab = companyScaleRangeInput
 
+        // 进度显示
+        this.showTable = this.buildShowTable();
+
         // 操作面板结构：
         let operationPanel = DOMApi.createTag("div");
         // 说明文档
@@ -424,6 +427,7 @@ class OperationPanel {
         operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(this.hrTag())
         operationPanel.appendChild(inputContainerDiv)
+        operationPanel.appendChild(this.showTable)
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -443,6 +447,10 @@ class OperationPanel {
 
     registerEvent() {
         TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_COUNT, this.publishCountChangeEventHandler.bind(this))
+    }
+
+    refreshShow(text) {
+        this.showTable.innerHTML = "当前操作：" + text
     }
 
 
@@ -501,6 +509,11 @@ class OperationPanel {
         });
 
         return aboutDiv;
+    }
+
+
+    buildShowTable() {
+        return DOMApi.createTag('p', '', 'font-size: 20px;color: rgb(64, 158, 255);margin-left: 50px;');
     }
 
 
@@ -572,7 +585,7 @@ class ScriptConfig extends TampermonkeyApi {
     static PUSH_COUNT = "pushCount:" + ScriptConfig.getCurDay();
     static SCRIPT_ENABLE = "script_enable";
     static ACTIVE_ENABLE = "activeEnable";
-    static PUSH_LIMIT = "push_limit";
+    static PUSH_LIMIT = "push_limit" + ScriptConfig.getCurDay();
     // 投递锁是否被占用，可重入；value表示当前正在投递的job
     static PUSH_LOCK = "push_lock";
 
@@ -804,6 +817,7 @@ class JobListPageHandler {
             return;
         }
         // 每次投递前清空投递锁，未被占用
+        this.scriptConfig.setVal(ScriptConfig.PUSH_LIMIT, false)
         TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
         // 每次读取操作面板中用户实时输入的值
         this.operationPanel.readInputConfig()
@@ -825,6 +839,7 @@ class JobListPageHandler {
 
             if (!this.publishState) {
                 logger.info("投递结束")
+                this.operationPanel.refreshShow("投递停止")
                 this.changeBatchPublishState(false);
                 return;
             }
@@ -870,6 +885,7 @@ class JobListPageHandler {
                     // 需要结束整个promiseChain，在catch throw exp,但还会继续执行下一个元素catch中的逻辑
                     switch (true) {
                         case error instanceof JobNotMatchExp:
+                            this.operationPanel.refreshShow(jobTitle + " 不满足投递条件")
                             ++notMatchCount;
                             break;
 
@@ -879,11 +895,13 @@ class JobListPageHandler {
 
                         case error instanceof SendPublishExp:
                             logger.error("投递失败;" + jobTitle + " 原因：" + error.message);
+                            this.operationPanel.refreshShow(jobTitle + " 投递失败")
                             publishResultCount.failCount++
                             break;
 
                         case error instanceof PublishLimitExp:
                             TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LIMIT, true);
+                            this.operationPanel.refreshShow("停止投递 " + error.message)
                             logger.error("投递停止; 原因：" + error.message);
                             throw new PublishStopExp(error.message)
 
@@ -1022,6 +1040,7 @@ class JobListPageHandler {
                 TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, jobTitle)
                 logger.debug("锁定投递锁：" + jobTitle)
 
+                this.operationPanel.refreshShow("正在投递-->" + jobTitle)
                 // 投递请求
                 axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
                     .then(resp => {
