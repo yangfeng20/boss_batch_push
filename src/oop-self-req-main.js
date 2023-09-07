@@ -2,21 +2,20 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.1.6
+// @version      1.1.7
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
 // @match        https://www.zhipin.com/*
+// @connect      www.tl.beer
 // @include      https://www.zhipin.com
 // @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_deleteValue
-// @grant        GM_listValues
+// @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
-// @grant        GM_cookie
-// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 "use strict";
@@ -76,6 +75,10 @@ class TampermonkeyApi {
         return GM_getValue(key, defVal);
     }
 
+    static GMXmlHttpRequest(options) {
+        return GM_xmlhttpRequest(options)
+    }
+
     static GmAddValueChangeListener(key, func) {
         return GM_addValueChangeListener(key, func);
     }
@@ -83,10 +86,6 @@ class TampermonkeyApi {
 }
 
 class Tools {
-
-
-    static job_detail_securityId_Regex = /var _jobInfo = {[^}]*securityId:'(.*?)'/;
-    static job_detail_job_content_Regex = /<div class="job-sec-text">(.*?)<\/div>/s;
 
 
     /**
@@ -215,17 +214,6 @@ class Tools {
         };
     }
 
-    static htmlParseParams(html) {
-        let securityIdMatch = html.match(Tools.job_detail_securityId_Regex);
-        let jobContentMatch = html.match(Tools.job_detail_job_content_Regex);
-
-
-        return {
-            securityId: securityIdMatch && securityIdMatch[1],
-            jobContent: jobContentMatch && jobContentMatch[1].replaceAll("<br/>", "\n"),
-        }
-    }
-
     static queryString(baseURL, queryParams) {
         const queryString = Object.entries(queryParams)
             .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
@@ -296,6 +284,9 @@ class OperationPanel {
         // 公司规模范围输入框lab
         this.csrInInputLab = null
 
+        // 词云图canvas
+        this.worldCloudCanvas = null
+
 
         this.topTitle = null
 
@@ -348,6 +339,9 @@ class OperationPanel {
      */
     renderOperationPanel() {
 
+        this.worldCloudCanvas = DOMApi.createTag("canvas", "", "height: 300px;")
+        this.worldCloudCanvas.id = "worldCloudCanvas"
+
         logger.debug("操作面板开始初始化")
         // 1.创建操作按钮并添加到按钮容器中【以下绑定事件处理函数均采用箭头函数作为中转，避免this执行事件对象】
         let btnCssText = "display: inline-block; border-radius: 5px; background-color: rgb(64, 158, 255); color: rgb(255, 255, 255); text-decoration: none; padding: 10px;cursor: pointer";
@@ -359,16 +353,16 @@ class OperationPanel {
             this.batchPushBtnHandler()
         })
 
-        // 重置开关按钮
-        let resetBtn = DOMApi.createTag("button", "重置开关", btnCssText);
-        DOMApi.eventListener(resetBtn, "click", () => {
-            this.resetBtnHandler()
-        })
-
         // 保存配置按钮
         let storeConfigBtn = DOMApi.createTag("button", "保存配置", btnCssText);
         DOMApi.eventListener(storeConfigBtn, "click", () => {
             this.storeConfigBtnHandler()
+        })
+
+        // 生成Job词云图按钮
+        let generateImgBtn = DOMApi.createTag("button", "生成Job词云图", btnCssText);
+        DOMApi.eventListener(generateImgBtn, "click", () => {
+            this.generateImgHandler()
         })
 
         // 过滤不活跃boss按钮
@@ -383,32 +377,25 @@ class OperationPanel {
         // 将所有button添加到butDiv容器中
         let btnContainerDiv = DOMApi.createTag("div", "", "display: flex; justify-content: space-evenly;");
         btnContainerDiv.appendChild(batchPushBtn);
-        btnContainerDiv.appendChild(resetBtn);
+        btnContainerDiv.appendChild(generateImgBtn);
         btnContainerDiv.appendChild(storeConfigBtn);
         btnContainerDiv.appendChild(activeSwitchBtn);
 
         // 2.创建筛选条件输入框并添加到input容器中
-        let companyNameIncludeInput = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
-        let companyNameExcludeInput = DOMApi.createInputTag("公司名排除", this.scriptConfig.getCompanyNameExclude());
-        let jobNameIncludeInput = DOMApi.createInputTag("工作名包含", this.scriptConfig.getJobNameInclude());
-        let jobContentExcludeInput = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
-        let salaryRangeInput = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
-        let companyScaleRangeInput = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
+        this.cnInInputLab = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
+        this.cnExInputLab = DOMApi.createInputTag("公司名排除", this.scriptConfig.getCompanyNameExclude());
+        this.jnInInputLab = DOMApi.createInputTag("工作名包含", this.scriptConfig.getJobNameInclude());
+        this.jcExInputLab = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
+        this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
+        this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
 
         let inputContainerDiv = DOMApi.createTag("div", "", "margin:50px;");
-        inputContainerDiv.appendChild(companyNameIncludeInput)
-        inputContainerDiv.appendChild(companyNameExcludeInput)
-        inputContainerDiv.appendChild(jobNameIncludeInput)
-        inputContainerDiv.appendChild(jobContentExcludeInput)
-        inputContainerDiv.appendChild(salaryRangeInput)
-        inputContainerDiv.appendChild(companyScaleRangeInput)
-
-        this.cnInInputLab = companyNameIncludeInput
-        this.cnExInputLab = companyNameExcludeInput
-        this.jnInInputLab = jobNameIncludeInput
-        this.jcExInputLab = jobContentExcludeInput
-        this.srInInputLab = salaryRangeInput
-        this.csrInInputLab = companyScaleRangeInput
+        inputContainerDiv.appendChild(this.cnInInputLab)
+        inputContainerDiv.appendChild(this.cnExInputLab)
+        inputContainerDiv.appendChild(this.jnInInputLab)
+        inputContainerDiv.appendChild(this.jcExInputLab)
+        inputContainerDiv.appendChild(this.srInInputLab)
+        inputContainerDiv.appendChild(this.csrInInputLab)
 
         // 进度显示
         this.showTable = this.buildShowTable();
@@ -428,6 +415,7 @@ class OperationPanel {
         operationPanel.appendChild(this.hrTag())
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
+        operationPanel.appendChild(this.worldCloudCanvas)
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -525,11 +513,24 @@ class OperationPanel {
 
     }
 
-    resetBtnHandler() {
-        this.scriptConfig.setVal(ScriptConfig.SCRIPT_ENABLE, false)
-        this.scriptConfig.setVal(ScriptConfig.PUSH_LIMIT, false)
-        logger.debug("重置脚本开关成功")
-        window.alert("重置脚本开关成功");
+    generateImgHandler() {
+        let jobList = BossDOMApi.getJobList();
+        let allJobContent = ""
+        Array.from(jobList).reduce((promiseChain, jobTag) => {
+            return promiseChain
+                .then(() => this.jobListHandler.reqJobDetail(jobTag))
+                .then(jobCardJson => {
+                    allJobContent += jobCardJson.postDescription + ""
+                })
+        }, Promise.resolve())
+            .then(() => {
+                return JobWordCloud.participle(allJobContent)
+            }).then(worldArr => {
+            let weightWordArr = JobWordCloud.buildWord(worldArr);
+            logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+            debugger
+            JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+        })
     }
 
     readInputConfig() {
@@ -583,7 +584,6 @@ class ScriptConfig extends TampermonkeyApi {
 
     static LOCAL_CONFIG = "config";
     static PUSH_COUNT = "pushCount:" + ScriptConfig.getCurDay();
-    static SCRIPT_ENABLE = "script_enable";
     static ACTIVE_ENABLE = "activeEnable";
     static PUSH_LIMIT = "push_limit" + ScriptConfig.getCurDay();
     // 投递锁是否被占用，可重入；value表示当前正在投递的job
@@ -859,7 +859,6 @@ class JobListPageHandler {
     changeBatchPublishState(publishState) {
         this.publishState = publishState;
         this.operationPanel.changeBatchPublishBtn(publishState)
-        this.scriptConfig.setVal(ScriptConfig.SCRIPT_ENABLE, true)
     }
 
     filterCurPageAndPush() {
@@ -1131,6 +1130,155 @@ class JobListPageHandler {
 
         return true;
     }
+}
+
+
+class JobWordCloud {
+
+    // 不应该使用分词，而应该是分句，结合上下文，自然语言处理
+    static filterableWorldArr = ['', ' ', ',', '?', '+', '\n', '\r', "/", '有', '的', '等', '及', '了', '和', '公司', '熟悉', '服务', '并', '同', '如', '于', '或', '到',
+        '开发', '技术', '我们', '提供', '武汉', '经验', '为', '在', '团队', '员工', '工作', '能力', '-', '1', '2', '3', '4', '5', '6', '7', '8', '', '年', '与', '平台', '研发', '行业',
+        "实现", "负责", "代码", "精通", "图谱", "需求", "分析", "良好", "知识", "相关", "编码", "参与", "产品", "扎实", "具备", "较", "强", "沟通", "者", "优先", "具有", "精神", "编写", "功能", "完成", "详细", "岗位职责",
+        "包括", "解决", "应用", "性能", "调", "优", "本科", "以上学历", "基础", "责任心", "高", "构建", "合作", "能", "学习", "以上", "熟练", "问题", "优质", "运行", "工具", "方案", "根据", "业务", "类", "文档", "分配",
+        "其他", "亿", "级", "关系", "算法", "系统", "上线", "考虑", "工程师", "华为", "自动", "驾驶", "网络", "后", "端", "云", "高质量", "承担", "重点", "难点", "攻坚", "主导", "选型", "任务", "分解", "工作量", "评估",
+        "创造性", "过程", "中", "提升", "核心", "竞争力", "可靠性", "要求", "计算机专业", "基本功", "ee", "主流", "微", "框架", "其", "原理", "推进", "优秀", "团队精神", "热爱", "可用", "大型", "网站", "表达", "理解能力",
+        "同事", "分享", "愿意", "接受", "挑战", "拥有", "将", "压力", "转变", "动力", "乐观", "心态", "思路清晰", "严谨", "地", "习惯", "运用", "线", "上", "独立", "处理", "熟练掌握", "至少", "一种", "常见", "脚本", "环境",
+        "搭建", "开发工具", "人员", "讨论", "制定", "用", "相应", "保证", "质量", "说明", "领导", "包含", "节点", "存储", "检索", "api", "基于", "数据", "落地", "个性化", "场景", "支撑", "概要", "按照", "规范", "所", "模块",
+        "评审", "编译", "调试", "单元测试", "发布", "集成", "支持", "功能测试", "测试", "结果", "优化", "持续", "改进", "配合", "交付", "出现", "任职", "资格", "编程", "型", "使用", "认真负责", "高度", "责任感", "快速", "创新", "金融",
+
+        "设计", "项目", "对", "常用", "掌握", "专业", "进行", "了解", "岗位", "能够", "中间件", "以及", "开源", "理解", ")", "软件", "计算机", "架构", "一定", "缓存", "可", "解决问题", "计算机相关", "发展", "时间", "奖金", "培训", "部署",
+        "互联网", "享受", "善于", "需要", "游戏", " ", "维护", "统招", "语言", "消息", "机制", "逻辑思维", "一", "意识", "新", "攻关", "升级", "管理", "重构", "【", "职位", "】", "成员", "好", "接口", "语句", "后台", "通用", "不", "描述",
+        "福利", "险", "机会", "会", "人", "完善", "技术难题", "技能", "应用服务器", "配置", "协助", "或者", "组织", "现有", "迭代", "流程", "项目管理", "从", "深入", "复杂", "专业本科", "协议", "不断", "项目经理", "协作", "五", "金", "待遇",
+        "年终奖", "各类", "节日", "带薪", "你", "智慧", "前沿技术", "常用命令", "方案设计", "基本", "积极", "产品开发", "用户", "确保", "带领", "软件系统", "撰写", "软件工程", "职责", "抗压", "积极主动", "双休", "法定", "节假日", "假", "客户",
+        "日常", "协同", "是", "修改", "要", "软件开发", "丰富", "乐于", "识别", "风险", "合理", "服务器", "指导", "规划", "提高", "稳定性", "扩展性", "功底", "钻研", "c", "高可用性", "计算机软件", "高效", "前端", "内部", "一起", "程序", "程序开发",
+        "计划", "按时", "数理", "及其", "集合", "正式", "劳动合同", "薪资", "丰厚", "奖励", "补贴", "免费", "体检", "每年", "调薪", "活动", "职业", "素养", "晋升", "港", "氛围", "您", "存在", "关注", "停车", "参加", "系统分析", "发现", "稳定", "自主",
+        "实际", "开发技术", "(", "一些", "综合", "条件", "学历", "薪酬", "维", "保", "全日制", "专科", "体系结构", "协调", "出差", "自测", "周一", "至", "周五", "周末", "公积金", "准备", "内容", "部门", "满足", "兴趣", "方式", "操作", "超过", "结合",
+        "同时", "对接", "及时", "研究", "统一", "管控", "福利待遇", "政策", "办理", "凡是", "均", "丧假", "对于", "核心技术", "安全", "服务端", "游", "电商", "零售", "下", "扩展", "负载", "信息化", "命令", "供应链", "商业", "抽象", "模型", "领域", "瓶颈",
+        "充分", "编程语言", "自我", "但", "限于", "应用软件", "适合", "各种", "大", "前后", "复用", "执行", "流行", "app", "小", "二", "多种", "转正", "空间", "盒", "马", "长期", "成长", "间", "通讯", "全过程", "提交", "目标", "电气工程", "阅读", "严密",
+        "电力系统", "电力", "大小", "周", "心动", "入", "职", "即", "缴纳", "签署", "绩效奖金", "评优", "专利", "论文", "职称", "加班", "带薪休假", "专项", "健康", "每周", "运动", "休闲", "不定期", "小型", "团建", "旅游", "岗前", "牛", "带队", "答疑", "解惑",
+        "晋级", "晋升为", "管理层", "跨部门", "转岗", "地点", "武汉市", "东湖新技术开发区", "一路", "光谷", "园", "栋", "地铁", "号", "北站", "坐", "拥", "独栋", "办公楼", "环境优美", "办公", "和谐", "交通", "便利", "地铁站", "有轨电车", "公交站", "交通工具",
+        "齐全", "凯", "默", "电气", "期待", "加入", "积极参与", "依据", "工程", "跟进", "推动", "风险意识", "owner", "保持", "积极性", "自", "研", "内", "岗", "体验", "系统维护", "可能", "在线", "沟通交流", "简洁", "清晰", "录取", "优异者", "适当", "放宽", "上浮",
+        "必要", "后期", "软件技术", "形成", "技术成果", "调研", "分析师", "专", "含", "信息管理", "跨专业", "从业人员", "注", "安排", "交代", "书写", "做事", "细心", "好学", "可以", "公休", "年终奖金", "定期", "正规", "养老", "医疗", "生育", "工伤", "失业", "关怀",
+        "传统", "佳节", "之际", "礼包", "团结友爱", "伙伴", "丰富多彩", "两年", "过", "连接池", "划分", "检查", "部分", "甚至", "拆解", "硕士", "年龄", "周岁", "以下", "深厚", "语法", "浓厚", "优良", "治理", "a", "力", "高级", "能看懂", "有效", "共同", "想法", "提出",
+        "意见", "前", "最", "重要", "企业", "极好", "驻场", "并且", "表单", "交互方式", "样式", "前端开发", "遵循", "开发进度", "实战经验", "其中", "强烈", "三维", "多个", "net", "对应", "数学", "理工科", "背景", "软件设计", "模式", "方法", "动手", "按", "质", "软件产品",
+        "严格执行", "传", "帮", "带", "任务分配", "进度", "阶段", "介入", "本科学历", "五年", "尤佳", "比较", "细致", "态度", "享", "国家", "上班时间", "基本工资", "有关", "社会保险", "公司员工", "连续", "达到", "年限", "婚假", "产假", "护理", "发展潜力", "职员", "外出",
+        "做好", "效率", "沉淀", "网络服务", "数据分析", "查询", "规范化", "标准化", "思考", "手", "款", "成功", "卡", "牌", "slg", "更佳", "可用性", "新人", "预研", "突破", "lambda", "理念", "它", "rest", "一个", "趋势", "思路", "影响", "医疗系统", "具体", "架构师",
+        "保证系统", "大专", "三年", "体系", "写", "医院", "遇到", "验证", "运", "保障", "基本操作", "独立思考", "技术手段", "熟知", "懂", "应用环境", "表达能力", "个人", "新能源", "汽车", "权限", "排班", "绩效", "考勤", "知识库", "全局", "搜索", "门店", "渠道", "选址",
+        "所有", "长远", "眼光", "局限于", "逻辑", "侧", "更好", "解决方案", "针对", "建模", "定位系统", "高质", "把", "控", "攻克", "t", "必须", "组件", "基本原理", "上进心", "驱动", "适应能力", "自信", "追求", "卓越", "感兴趣", "站", "角度", "思考问题", "tob", "商业化",
+        "售后", "毕业", "通信", "数种", "优选", "it", "课堂", "所学", "在校", "期间", "校内外", "大赛", "参", "社区", "招聘", "类库", "优等", "b", "s", "方面", "海量", "数据系统", "测试工具", "曾", "主要", "爱好", "欢迎", "洁癖", "人士", "银行", "财务", "城市", "类产品", "实施",
+        "保障系统", "健壮性", "可读性", "rpd", "原型", "联调", "准确无误", "系统优化", "技术标准", "总体设计", "文件", "整理", "功能设计", "技术类", "写作能力", "尤其", "套件", "公安", "细分", "增加", "bug", "电子", "swing", "桌面", "认证", "台", "检测", "安全隐患", "及时发现",
+        "修补", "上级领导", "交办", "其它", "面向对象分析", "思想", "乐于助人", "全", "栈", "共享", "经济", "信", "主管", "下达", "执行力", "技巧", "试用期", "个", "月", "适应", "快", "随时", "表现", "\u003d", "到手", "工资", "享有", "提成", "超额", "业绩", "封顶", "足够", "发展前景",
+        "发挥", "处", "高速", "发展期", "敢", "就", "元旦", "春节", "清明", "端午", "五一", "中秋", "国庆", "婚", "病假", "商品", "导购", "增长", "互动", "营销", "面对", "不断创新", "规模化", "上下游", "各", "域", "最终", "完整", "梳理", "链路", "关键", "点", "给出", "策略", "从业", "且",
+        "可维护性", "不仅", "短期", "更", "方向", "不错", "交互", "主动", "应急", "组长", "tl", "加", "分", "一群", "怎样", "很", "热情", "喜欢", "敬畏", "心", "坚持", "主义", "持之以恒", "自己", "收获", "重视", "每", "一位", "主观", "能动性", "同学", "给予", "为此", "求贤若渴", "干货", "满满",
+        "战斗", "大胆", "互相", "信任", "互相帮助", "生活", "里", "嗨", "皮", "徒步", "桌", "轰", "趴", "聚餐", "应有尽有"
+    ]
+
+    static numberRegex = /^[0-9]+$/
+
+    static splitChar = " "
+
+    static participleUrl = "https://www.tl.beer/api/v1/fenci"
+
+    static participle(text) {
+        return new Promise((resolve, reject) => {
+
+            TampermonkeyApi.GMXmlHttpRequest({
+                method: 'POST',
+                timeout: 5000,
+                url: JobWordCloud.participleUrl,
+
+                data: "cont=" + encodeURIComponent(text) + "&cixin=false&model=false",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                },
+                onload: function (response) {
+                    if (response.status !== 200) {
+                        logger.error("分词状态码不是200", response.responseText)
+                        return reject(response.responseText)
+                    }
+                    return resolve(JSON.parse(response.responseText).data.split(JobWordCloud.splitChar))
+                },
+                onerror: function (error) {
+                    logger.error("分词出错", error)
+                    reject(error)
+                }
+            });
+        })
+    }
+
+    static buildWord(wordArr) {
+        // {"word1":1, "word2":4}
+        let weightMap = {};
+        for (let i = 0; i < wordArr.length; i++) {
+            let str = wordArr[i];
+            if (JobWordCloud.filterableWorldArr.includes(str)) {
+                continue;
+            }
+            if (JobWordCloud.numberRegex.test(str)) {
+                continue;
+            }
+            if (str in weightMap) {
+                weightMap[str] = weightMap[str] + 1;
+                continue
+            }
+            weightMap[str] = 1;
+        }
+
+        // 将对象转换为二维数组并排序： [['word1', 2], ['word2', 4]]
+        let weightWordArr = JobWordCloud.sortByValue(Object.entries(weightMap));
+        return JobWordCloud.cutData(weightWordArr)
+    }
+
+    static cutData(weightWordArr) {
+        return weightWordArr
+    }
+
+    static generateWorldCloudImage(canvasTagId, weightWordArr) {
+        // 词云图的配置选项
+        let options = {
+            list: weightWordArr,
+            // 网格尺寸
+            gridSize: 10,
+            // 权重系数
+            weightFactor: 2,
+            // 字体
+            fontFamily: 'Finger Paint, cursive, sans-serif',
+            // 字体颜色，也可以指定特定颜色值
+            color: '#26ad7e',
+            // 旋转比例
+            rotateRatio: 0.2,
+            // 背景颜色
+            backgroundColor: 'white',
+            // 形状
+            shape: 'square',
+            // 随机排列词语
+            shuffle: true,
+            // 不绘制超出容器边界的词语
+            drawOutOfBound: false
+        };
+
+        WordCloud(document.getElementById(canvasTagId), options);
+    }
+
+    static getKeyWorldArr(twoArr) {
+        let worldArr = []
+        for (let i = 0; i < twoArr.length; i++) {
+            let world = twoArr[i][0];
+            worldArr.push(world)
+        }
+        return worldArr;
+    }
+
+    static sortByValue(arr, order = 'desc') {
+        if (order === 'asc') {
+            return arr.sort((a, b) => a[1] - b[1]);
+        } else if (order === 'desc') {
+            return arr.sort((a, b) => b[1] - a[1]);
+        } else {
+            throw new Error('Invalid sort key. Use "asc" or "desc".');
+        }
+    }
+
 }
 
 
