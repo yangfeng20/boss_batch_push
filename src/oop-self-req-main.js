@@ -528,9 +528,29 @@ class OperationPanel {
             }).then(worldArr => {
             let weightWordArr = JobWordCloud.buildWord(worldArr);
             logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
-            debugger
             JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
         })
+    }
+
+    /**
+     * 生成词云图
+     * 使用的数据源为 job标签，并且并进行分支，直接计算权重
+     */
+    generateImgHandlerJobLabel() {
+        let jobList = BossDOMApi.getJobList();
+        let jobLabelArr = []
+        Array.from(jobList).reduce((promiseChain, jobTag) => {
+            return promiseChain
+                .then(() => this.jobListHandler.reqJobDetail(jobTag))
+                .then(jobCardJson => {
+                    jobLabelArr.push(...jobCardJson.jobLabels)
+                })
+        }, Promise.resolve())
+            .then(() => {
+                let weightWordArr = JobWordCloud.buildWord(jobLabelArr);
+                logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+                JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+            })
     }
 
     readInputConfig() {
