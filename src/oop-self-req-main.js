@@ -297,7 +297,7 @@ class OperationPanel {
         this.docTextArr = [
             "!加油，相信自己😶‍🌫️",
             "1.批量投递：点击批量投递开始批量投简历，请先通过上方Boss的筛选功能筛选大致的范围，然后通过脚本的筛选进一步确认投递目标。",
-            "2.重置开关：如果你需要自己浏览工作详情页面，请点击该按钮关闭自动投递。如果不关闭，打开工作详情页，会自动投递并关闭页面。",
+            "2.生成Job词云图：获取当前页面的所有job详情，并进行分词权重分析；生成岗位热点词汇词云图；帮助分析简历匹配度",
             "3.保存配置：保持下方脚本筛选项，用于后续直接使用当前配置。",
             "4.过滤不活跃Boss：打开后会自动过滤掉最近未活跃的Boss发布的工作。以免浪费每天的100次机会。",
             "😏",
@@ -362,7 +362,7 @@ class OperationPanel {
         // 生成Job词云图按钮
         let generateImgBtn = DOMApi.createTag("button", "生成Job词云图", btnCssText);
         DOMApi.eventListener(generateImgBtn, "click", () => {
-            this.generateImgHandler()
+            this.generateImgHandlerJobLabel()
         })
 
         // 过滤不活跃boss按钮
@@ -513,9 +513,14 @@ class OperationPanel {
 
     }
 
+    /**
+     * 生成词云图
+     * 使用的数据源为 job工作内容，进行分词
+     */
     generateImgHandler() {
         let jobList = BossDOMApi.getJobList();
         let allJobContent = ""
+        this.refreshShow("生成词云图【获取Job数据中】")
         Array.from(jobList).reduce((promiseChain, jobTag) => {
             return promiseChain
                 .then(() => this.jobListHandler.reqJobDetail(jobTag))
@@ -524,21 +529,24 @@ class OperationPanel {
                 })
         }, Promise.resolve())
             .then(() => {
+                this.refreshShow("生成词云图【构建数据中】")
                 return JobWordCloud.participle(allJobContent)
             }).then(worldArr => {
             let weightWordArr = JobWordCloud.buildWord(worldArr);
             logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
             JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+            this.refreshShow("生成词云图【完成】")
         })
     }
 
     /**
      * 生成词云图
-     * 使用的数据源为 job标签，并且并进行分支，直接计算权重
+     * 使用的数据源为 job标签，并且不进行分词，直接计算权重
      */
     generateImgHandlerJobLabel() {
         let jobList = BossDOMApi.getJobList();
         let jobLabelArr = []
+        this.refreshShow("生成词云图【获取Job数据中】")
         Array.from(jobList).reduce((promiseChain, jobTag) => {
             return promiseChain
                 .then(() => this.jobListHandler.reqJobDetail(jobTag))
@@ -547,9 +555,11 @@ class OperationPanel {
                 })
         }, Promise.resolve())
             .then(() => {
+                this.refreshShow("生成词云图【构建数据中】")
                 let weightWordArr = JobWordCloud.buildWord(jobLabelArr);
                 logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
                 JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+                this.refreshShow("生成词云图【完成】")
             })
     }
 
@@ -1083,7 +1093,7 @@ class JobListPageHandler {
                     logger.debug("释放投递锁：" + jobTitle)
                     TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
                 })
-            }, 500);
+            }, 800);
         })
     }
 
