@@ -7,9 +7,8 @@
 // @license      Apache License 2.0
 // @run-at       document-start
 // @match        https://www.zhipin.com/*
-// @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
-// @require      https://scriptcat.org/lib/637/1.3.1/ajaxHooker.js
 // @include      https://www.zhipin.com
+// @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
@@ -17,6 +16,7 @@
 // @grant        GM_addValueChangeListener
 // @grant        GM_cookie
 // @grant        GM_registerMenuCommand
+// @grant        GM_notification
 // ==/UserScript==
 
 const docTextArr = [
@@ -103,6 +103,21 @@ const upPage = () => {
   currentPage = currentPage === null ? 1 : parseInt(currentPage[0]);
 };
 
+function notific(content) {
+  GM_notification({
+    title: "Boss直聘批量投简历",
+    image:
+      "https://img.bosszhipin.com/beijin/mcs/banner/3e9d37e9effaa2b6daf43f3f03f7cb15cfcd208495d565ef66e7dff9f98764da.jpg",
+    text: content,
+    highlight: true, // 布尔值，是否突出显示发送通知的选项卡
+    silent: true, // 布尔值，是否播放声音
+    timeout: 10000, // 设置通知隐藏时间
+    onclick: function () {
+      console.log("点击了通知");
+    },
+    ondone() {}, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
+  });
+}
 // 开始批量投递
 const batchHandler = (el) => {
   if (!runT) {
@@ -115,6 +130,7 @@ const batchHandler = (el) => {
       }
       // 每次投递加载最新的配置
       loadConfig();
+      upPage();
       console.log("开始批量投递,当前页数：", currentPage);
       GmSetValue(BATCH_ENABLE, true);
 
@@ -147,10 +163,12 @@ const batchHandler = (el) => {
 
           if (GmGetValue(PUSH_LIMIT, false)) {
             console.log("今日沟通已达boss限制");
+            notific("今日沟通已达boss限制");
             window.alert(
               "今天已经不能在沟通了，愿你早日找到心满意足的工作，不要灰心，我一直与你同在~"
             );
-            break;
+            clear(el);
+            return;
           }
 
           // 当前table页是活跃的，也是另外一遍点击立即沟通之后，以及关闭页面
@@ -161,53 +179,30 @@ const batchHandler = (el) => {
           iframeEl.src = job.querySelector(".job-card-left").href;
         }
 
+        const nextButtonRight = document.querySelector(".ui-icon-arrow-right"); // 下一页
+        const nextButtonLeft = document.querySelector(".ui-icon-arrow-left"); // 上一页
         if (
           !runT ||
-          currentPage >= pushPageCount ||
-          GmGetValue(PUSH_LIMIT, false)
+          // currentPage >= pushPageCount ||
+          GmGetValue(PUSH_LIMIT, false) ||
+          nextButtonRight.parentElement.className === "disabled"
         ) {
           console.log("一共", pushPageCount, "页");
-          console.log("共投递", GmGetValue(PUSH_COUNT, 0), "份");
-          console.log("投递完毕");
-          clear();
+          notific("投递完毕");
+          window.alert("共投递", GmGetValue(PUSH_COUNT, 0), "份");
+          clear(el);
           return;
         }
-
-        const nextButtonRight = document.querySelector(".ui-icon-arrow-right");
-        const nextButtonLeft = document.querySelector(".ui-icon-arrow-left");
-        // 没有下一页
-        //if (nextButton.parentElement.className === "disabled") {
-        //  let temp =
-        //    "共投递" +
-        //    GmGetValue(PUSH_COUNT, 0) +
-        //    "份，没有更多符合条件的工作";
-        //  window.alert(temp);
-        //  console.log(temp);
-        //  batchHandler(el);
-        //  clear();
-        //  return;
-        //}
-        //nextPage()
-        currentPage++;
         console.log("下一页,开始等待8秒钟");
-
-        if (nextButtonRight.parentElement.className === "disabled") {
-          nextButtonLeft.click();
-        } else {
-          nextButtonRight.click();
-        }
+        nextButtonRight.click();
         setTimeout(() => runbatch(), 8000);
       }
-
       // 每隔5秒执行一次点击操作
       clickJobList(document.querySelectorAll(".job-card-wrapper"), 5000);
     };
     runbatch();
   } else {
-    runT = false;
-    el.style.backgroundColor = "#409eff";
-    el.innerText = "批量投递";
-    GmSetValue(BATCH_ENABLE, true);
+    clear(el);
   }
 };
 
@@ -267,6 +262,7 @@ const jobListHandler = () => {
   };
   setSwitchButtonState(GmGetValue(ACTIVE_ENABLE, true));
   iframeEl = document.createElement("iframe");
+  iframeEl.style.resize = "both";
   // 添加事件监听，执行回调函数
   switchButton.addEventListener("click", () => {
     setSwitchButtonState(!switchState);
@@ -570,8 +566,12 @@ function resetStatus() {
 }
 
 // 清理
-function clear() {
+function clear(el = undefined) {
   runT = false;
+  if (el) {
+    el.style.backgroundColor = "#409eff";
+    el.innerText = "批量投递";
+  }
   GmSetValue(PUSH_LOCK, false);
   GmSetValue(PUSH_LIMIT, false);
   GmSetValue(BATCH_ENABLE, false);
@@ -631,6 +631,7 @@ function docEl() {
   Div.appendChild(docDiv);
   return Div;
 }
+
 // 配置元素生成
 function configEl() {
   // 加载持久化的配置，并加载到内存
@@ -827,23 +828,6 @@ GM_registerMenuCommand("清空所有存储!", async () => {
   curId = GM_getValue(ID_CUR, null);
   if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
     upPage();
-    ajaxHooker.filter([
-      { type: "xhr", url: "wapi/zpgeek/search/joblist.json", method: "GET" },
-      // 下面放需要拦截的uri,减少开支
-      // { url: ".png" },
-    ]);
-    // 直接拦截请求url,修改page,实现无限下一页
-    //ps:nt的限制最多30个，不然直接请求1000个了～
-    ajaxHooker.hook((request) => {
-      if (
-        request.url.includes("wapi/zpgeek/search/joblist.json") &&
-        request.method === "GET"
-      ) {
-        request.url = request.url.replace(/(?<=page=)\d*/, currentPage);
-      } else {
-        request.abort = true;
-      }
-    });
     window.addEventListener("load", jobListHandler);
   } else if (document.URL.includes(detail_url)) {
     window.addEventListener("load", jobDetailHandler);
