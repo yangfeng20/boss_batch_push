@@ -16,6 +16,7 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
+// @grant        GM_addStyle
 // ==/UserScript==
 
 "use strict";
@@ -260,6 +261,21 @@ class DOMApi {
     static eventListener(tag, eventType, func) {
         tag.addEventListener(eventType, func)
     }
+
+    static delElement(name,el=document){
+        const element = el.querySelector(name)
+        if (element){
+            element.remove()
+        }
+    }
+    static setElement(name,style,el=document){
+        const element = el.querySelector(name)
+        if (element){
+            for (let atr in style){
+                element.style[atr] = style[atr]
+            }
+        }
+    }
 }
 
 
@@ -411,7 +427,7 @@ class OperationPanel {
         // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
-        // operationPanel.appendChild(this.worldCloudCanvas)
+        operationPanel.appendChild(this.worldCloudCanvas)
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -450,10 +466,38 @@ class OperationPanel {
             cityAreaDropdown.appendChild(operationPanel);
             clearInterval(timingCutPageTask);
             logger.debug("初始化【操作面板】成功")
+            // 页面美化
+            this.pageBeautification()
         }, 1000);
     }
 
-
+    /**
+     * 页面美化
+     */
+    pageBeautification(){
+        // 侧栏
+        DOMApi.delElement(".job-side-wrapper")
+        // 侧边悬浮框
+        DOMApi.delElement(".side-bar-box")
+        // 新职位发布时通知我
+        DOMApi.delElement(".subscribe-weixin-wrapper")
+        // 顶部面板
+        // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
+        // DOMApi.setElement(".page-job-content",{width:"90%"})
+        // DOMApi.setElement(".job-list-wrapper",{width:"100%"})
+        GM_addStyle(`
+        .job-search-wrapper,.page-job-content{width: 90% !important}
+        .job-list-wrapper,.job-card-wrapper,.job-search-wrapper.fix-top{width: 100% !important}
+        .job-card-wrapper .job-card-body{display: flex;justify-content: space-between;}
+        .job-card-wrapper .job-card-left{width: 50% !important}
+        .job-card-wrapper .start-chat-btn,.job-card-wrapper:hover .info-public{display: initial !important}
+        .job-card-wrapper .job-card-footer{min-height: 48px;display: flex;justify-content: space-between}
+        .job-card-wrapper .clearfix:after{content: none}
+        .job-card-wrapper .job-card-footer .info-desc{width: auto !important}
+        .job-card-wrapper .job-card-footer .tag-list{width: auto !important;margin-right:10px}
+        `)
+        logger.debug("初始化【页面美化】成功")
+    }
     registerEvent() {
         TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_COUNT, this.publishCountChangeEventHandler.bind(this))
     }
