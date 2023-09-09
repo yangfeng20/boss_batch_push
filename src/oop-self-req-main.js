@@ -16,6 +16,7 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
+// @grant        GM_addStyle
 // ==/UserScript==
 
 "use strict";
@@ -248,8 +249,8 @@ class DOMApi {
         }
 
         // 样式
-        inputNameLabel.style.cssText = "display: inline-block; width: 20%; font-weight: bold;";
-        inputTag.style.cssText = "margin-left: 2px; width: 70%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
+        inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px; font-weight: bold; width: 200px;";
+        inputTag.style.cssText = "margin-left: 2px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
         return inputNameLabel;
     }
 
@@ -259,6 +260,21 @@ class DOMApi {
 
     static eventListener(tag, eventType, func) {
         tag.addEventListener(eventType, func)
+    }
+
+    static delElement(name,el=document){
+        const element = el.querySelector(name)
+        if (element){
+            element.remove()
+        }
+    }
+    static setElement(name,style,el=document){
+        const element = el.querySelector(name)
+        if (element){
+            for (let atr in style){
+                element.style[atr] = style[atr]
+            }
+        }
     }
 }
 
@@ -344,29 +360,29 @@ class OperationPanel {
 
         logger.debug("操作面板开始初始化")
         // 1.创建操作按钮并添加到按钮容器中【以下绑定事件处理函数均采用箭头函数作为中转，避免this执行事件对象】
-        let btnCssText = "display: inline-block; border-radius: 5px; background-color: rgb(64, 158, 255); color: rgb(255, 255, 255); text-decoration: none; padding: 10px;cursor: pointer";
+        let btnCssText = "display: inline-block;border-radius: 4px;background: #e5f8f8;color: #00a6a7; text-decoration: none;margin: 20px 20px 0px 20px;padding: 6px 12px;cursor: pointer";
 
         // 批量投递按钮
-        let batchPushBtn = DOMApi.createTag("button", "批量投递", btnCssText);
+        let batchPushBtn = DOMApi.createTag("div", "批量投递", btnCssText);
         this.batchPushBtn = batchPushBtn
         DOMApi.eventListener(batchPushBtn, "click", () => {
             this.batchPushBtnHandler()
         })
 
         // 保存配置按钮
-        let storeConfigBtn = DOMApi.createTag("button", "保存配置", btnCssText);
+        let storeConfigBtn = DOMApi.createTag("div", "保存配置", btnCssText);
         DOMApi.eventListener(storeConfigBtn, "click", () => {
             this.storeConfigBtnHandler()
         })
 
         // 生成Job词云图按钮
-        let generateImgBtn = DOMApi.createTag("button", "生成Job词云图", btnCssText);
+        let generateImgBtn = DOMApi.createTag("div", "生成Job词云图", btnCssText);
         DOMApi.eventListener(generateImgBtn, "click", () => {
             this.generateImgHandlerJobLabel()
         })
 
         // 过滤不活跃boss按钮
-        let activeSwitchBtn = DOMApi.createTag("button", "保存配置", btnCssText);
+        let activeSwitchBtn = DOMApi.createTag("div", "活跃度过滤", btnCssText);
         this.activeSwitchBtn = activeSwitchBtn
         DOMApi.eventListener(activeSwitchBtn, "click", () => {
             this.activeSwitchBtnHandler(!this.bossActiveState)
@@ -375,11 +391,11 @@ class OperationPanel {
         this.activeSwitchBtnHandler(this.bossActiveState)
 
         // 将所有button添加到butDiv容器中
-        let btnContainerDiv = DOMApi.createTag("div", "", "display: flex; justify-content: space-evenly;");
-        btnContainerDiv.appendChild(batchPushBtn);
-        btnContainerDiv.appendChild(generateImgBtn);
-        btnContainerDiv.appendChild(storeConfigBtn);
-        btnContainerDiv.appendChild(activeSwitchBtn);
+        // let btnContainerDiv = DOMApi.createTag("div", "", "display: flex; justify-content: space-evenly;");
+        // btnContainerDiv.appendChild(batchPushBtn);
+        // btnContainerDiv.appendChild(generateImgBtn);
+        // btnContainerDiv.appendChild(storeConfigBtn);
+        // btnContainerDiv.appendChild(activeSwitchBtn);
 
         // 2.创建筛选条件输入框并添加到input容器中
         this.cnInInputLab = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
@@ -389,7 +405,7 @@ class OperationPanel {
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
 
-        let inputContainerDiv = DOMApi.createTag("div", "", "margin:50px;");
+        let inputContainerDiv = DOMApi.createTag("div", "", "margin: 10px 0px;");
         inputContainerDiv.appendChild(this.cnInInputLab)
         inputContainerDiv.appendChild(this.cnExInputLab)
         inputContainerDiv.appendChild(this.jnInInputLab)
@@ -408,11 +424,7 @@ class OperationPanel {
         // 筛选输入框
         // iframe【详情页投递内部页】
         operationPanel.appendChild(this.buildDocDiv())
-        operationPanel.appendChild(this.hrTag())
-        operationPanel.appendChild(this.buildAbout())
-        operationPanel.appendChild(this.hrTag())
-        operationPanel.appendChild(btnContainerDiv)
-        operationPanel.appendChild(this.hrTag())
+        // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
         operationPanel.appendChild(this.worldCloudCanvas)
@@ -421,18 +433,71 @@ class OperationPanel {
         let timingCutPageTask = setInterval(() => {
             logger.debug("等待页面加载，添加操作面板")
             // 页面锚点
-            let jobListPageAnchor = document.querySelector(".job-list-wrapper");
-            if (!jobListPageAnchor) {
+            const jobSearchWrapper = document.querySelector(".job-search-wrapper")
+            if (!jobSearchWrapper) {
                 return;
             }
-
-            jobListPageAnchor.insertBefore(operationPanel, jobListPageAnchor.firstElementChild);
+            const jobConditionWrapper = jobSearchWrapper.querySelector(".search-condition-wrapper")
+            if (!jobConditionWrapper) {
+                return
+            }
+            let topTitle = DOMApi.createTag("h2");
+            this.topTitle = topTitle;
+            topTitle.textContent = `Boos直聘投递助手（${this.scriptConfig.getVal(ScriptConfig.PUSH_COUNT, 0)}次） 记得 star⭐`;
+            jobConditionWrapper.insertBefore(topTitle, jobConditionWrapper.firstElementChild)
+            // 按钮/搜索换位
+            const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
+            jobSearchBox.style.margin = "20px 0"
+            const city = jobConditionWrapper.querySelector(".city-area-select")
+            city.querySelector(".city-area-current").style.width = "85px"
+            const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
+            const cityAreaDropdown = jobSearchWrapper.querySelector(".city-area-dropdown")
+            cityAreaDropdown.insertBefore(jobSearchBox, cityAreaDropdown.firstElementChild)
+            const filter = DOMApi.createTag("div", "", "overflow：hidden ")
+            condition.forEach(item => {
+                filter.appendChild(item)
+            })
+            filter.appendChild(DOMApi.createTag("div", "", "clear:both"))
+            cityAreaDropdown.appendChild(filter)
+            const bttt = [batchPushBtn, generateImgBtn, storeConfigBtn, activeSwitchBtn]
+            bttt.forEach(item => {
+                jobConditionWrapper.appendChild(item);
+            })
+            cityAreaDropdown.appendChild(operationPanel);
             clearInterval(timingCutPageTask);
             logger.debug("初始化【操作面板】成功")
+            // 页面美化
+            this.pageBeautification()
         }, 1000);
     }
 
-
+    /**
+     * 页面美化
+     */
+    pageBeautification(){
+        // 侧栏
+        DOMApi.delElement(".job-side-wrapper")
+        // 侧边悬浮框
+        DOMApi.delElement(".side-bar-box")
+        // 新职位发布时通知我
+        DOMApi.delElement(".subscribe-weixin-wrapper")
+        // 顶部面板
+        // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
+        // DOMApi.setElement(".page-job-content",{width:"90%"})
+        // DOMApi.setElement(".job-list-wrapper",{width:"100%"})
+        GM_addStyle(`
+        .job-search-wrapper,.page-job-content{width: 90% !important}
+        .job-list-wrapper,.job-card-wrapper,.job-search-wrapper.fix-top{width: 100% !important}
+        .job-card-wrapper .job-card-body{display: flex;justify-content: space-between;}
+        .job-card-wrapper .job-card-left{width: 50% !important}
+        .job-card-wrapper .start-chat-btn,.job-card-wrapper:hover .info-public{display: initial !important}
+        .job-card-wrapper .job-card-footer{min-height: 48px;display: flex;justify-content: space-between}
+        .job-card-wrapper .clearfix:after{content: none}
+        .job-card-wrapper .job-card-footer .info-desc{width: auto !important}
+        .job-card-wrapper .job-card-footer .tag-list{width: auto !important;margin-right:10px}
+        `)
+        logger.debug("初始化【页面美化】成功")
+    }
     registerEvent() {
         TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_COUNT, this.publishCountChangeEventHandler.bind(this))
     }
@@ -450,17 +515,31 @@ class OperationPanel {
     }
 
     buildDocDiv() {
-        const docDiv = DOMApi.createTag("div", "", "background-color: rgb(242, 242, 242); padding: 5px; width: 100%;")
-        let txtDiv = DOMApi.createTag("div");
-        const title = DOMApi.createTag("h3", "操作说明(点击折叠)", "")
+        const docDiv = DOMApi.createTag("div", "", "margin: 10px 0px; width: 100%;")
+        let txtDiv = DOMApi.createTag("div", "", "display: none;");
+        const title = DOMApi.createTag("h3", "操作说明(点击展开)", "margin: 10px 0px;cursor: pointer")
+
         docDiv.appendChild(title)
         docDiv.appendChild(txtDiv)
-        for (let i = 0; i < this.docTextArr.length; i++) {
+        this.docTextArr.forEach(doc => {
             const textTag = document.createElement("p");
             textTag.style.color = "#666";
-            textTag.innerHTML = this.docTextArr[i];
+            textTag.innerHTML = doc;
             txtDiv.appendChild(textTag)
-        }
+        })
+
+        this.aboutLink.forEach((linkMap) => {
+            let about = DOMApi.createTag("p", "", "padding-top: 12px;");
+            linkMap.forEach((item) => {
+                const a = document.createElement("a");
+                a.innerText = item[0];
+                a.href = item[1];
+                a.target = "_blank";
+                a.style.margin = "0 20px 0 0";
+                about.appendChild(a);
+            });
+            txtDiv.appendChild(about);
+        });
 
         // 点击title，内部元素折叠
         DOMApi.eventListener(title, "click", () => {
@@ -469,7 +548,6 @@ class OperationPanel {
                 txtDiv.style.display = 'none';
             } else {
                 txtDiv.style.display = 'block';
-
             }
         })
         return docDiv;
@@ -477,10 +555,6 @@ class OperationPanel {
 
     buildAbout() {
         let aboutDiv = DOMApi.createTag("div");
-
-        let topTitle = DOMApi.createTag("h2");
-        this.topTitle = topTitle;
-        topTitle.textContent = `Boos直聘投递助手（${this.scriptConfig.getVal(ScriptConfig.PUSH_COUNT, 0)}次） 脚本对您有所帮助；记得点个star⭐`;
         aboutDiv.appendChild(topTitle)
 
         this.aboutLink.forEach((linkMap) => {
@@ -532,11 +606,11 @@ class OperationPanel {
                 this.refreshShow("生成词云图【构建数据中】")
                 return JobWordCloud.participle(allJobContent)
             }).then(worldArr => {
-            let weightWordArr = JobWordCloud.buildWord(worldArr);
-            logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
-            JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
-            this.refreshShow("生成词云图【完成】")
-        })
+                let weightWordArr = JobWordCloud.buildWord(worldArr);
+                logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+                JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+                this.refreshShow("生成词云图【完成】")
+            })
     }
 
     /**
@@ -583,17 +657,19 @@ class OperationPanel {
         this.bossActiveState = isOpen;
         if (this.bossActiveState) {
             this.activeSwitchBtn.innerText = "过滤不活跃Boss:已开启";
-            this.activeSwitchBtn.style.backgroundColor = "#67c23a";
+            this.activeSwitchBtn.style.backgroundColor = "rgb(215,254,195)";
+            this.activeSwitchBtn.style.color = "rgb(2,180,6)";
         } else {
             this.activeSwitchBtn.innerText = "过滤不活跃Boss:已关闭";
-            this.activeSwitchBtn.style.backgroundColor = "#f56c6c";
+            this.activeSwitchBtn.style.backgroundColor = "rgb(251,224,224)";
+            this.activeSwitchBtn.style.color = "rgb(254,61,61)";
         }
         this.scriptConfig.setVal(ScriptConfig.ACTIVE_ENABLE, isOpen)
     }
 
     publishCountChangeEventHandler(key, oldValue, newValue, isOtherScriptOther) {
-        this.topTitle.textContent = `Boos直聘投递助手（${newValue}次） 脚本对您有所帮助；记得点个star⭐`;
-        logger.debug("投递次数变更事件", {key, oldValue, newValue, isOtherScriptOther})
+        this.topTitle.textContent = `Boos直聘投递助手（${newValue}次） 记得 star⭐`;
+        logger.debug("投递次数变更事件", { key, oldValue, newValue, isOtherScriptOther })
     }
 
     /*-------------------------------------------------other method--------------------------------------------------*/
@@ -601,13 +677,14 @@ class OperationPanel {
     changeBatchPublishBtn(start) {
         if (start) {
             this.batchPushBtn.innerHTML = "停止投递"
-            this.batchPushBtn.style.backgroundColor = "#c6102c";
+            this.batchPushBtn.style.backgroundColor = "rgb(251,224,224)";
+            this.batchPushBtn.style.color = "rgb(254,61,61)";
         } else {
             this.batchPushBtn.innerHTML = "批量投递"
-            this.batchPushBtn.style.backgroundColor = "#409eff";
+            this.batchPushBtn.style.backgroundColor = "rgb(215,254,195)";
+            this.batchPushBtn.style.color = "rgb(2,180,6)";
         }
     }
-
 }
 
 class ScriptConfig extends TampermonkeyApi {
@@ -966,13 +1043,13 @@ class JobListPageHandler {
             }
 
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
-            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 5000})
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, { timeout: 5000 })
                 .then(resp => {
                     return resolve(resp.data.zpData.jobCard);
                 }).catch(error => {
-                logger.debug("获取详情页异常正在重试:", error)
-                return this.reqJobDetail(jobTag, retries - 1)
-            })
+                    logger.debug("获取详情页异常正在重试:", error)
+                    return this.reqJobDetail(jobTag, retries - 1)
+                })
         })
     }
 
@@ -1071,7 +1148,7 @@ class JobListPageHandler {
 
                 this.operationPanel.refreshShow("正在投递-->" + jobTitle)
                 // 投递请求
-                axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
+                axios.post(url, null, { headers: { "Zp_token": Tools.getCookieValue("geek_zp_token") } })
                     .then(resp => {
                         if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.content) {
                             // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
@@ -1086,13 +1163,13 @@ class JobListPageHandler {
                         }
                         return resolve(resp.data);
                     }).catch(error => {
-                    logger.debug("投递异常正在重试:" + jobTitle, error)
-                    return resolve(this.sendPublishReq(jobTag, error.message, retries - 1))
-                }).finally(() => {
-                    // 释放投递锁
-                    logger.debug("释放投递锁：" + jobTitle)
-                    TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
-                })
+                        logger.debug("投递异常正在重试:" + jobTitle, error)
+                        return resolve(this.sendPublishReq(jobTag, error.message, retries - 1))
+                    }).finally(() => {
+                        // 释放投递锁
+                        logger.debug("释放投递锁：" + jobTitle)
+                        TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
+                    })
             }, 800);
         })
     }
