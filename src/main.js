@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
-// @namespace    maple,Ocyss
+// @namespace    maple
 // @version      1.1.4
 // @author       maple,Ocyss
 // @license      Apache License 2.0
@@ -46,7 +46,7 @@ const aboutLink = [
   ],
   [
     ["作者：yangfeng20", "https://github.com/yangfeng20"],
-    ["二改：Ocyss_04", "https://github.com/Ocyss"],
+    ["贡献者：Ocyss_04", "https://github.com/Ocyss"],
   ],
 ];
 let companyArr = []; //公司名
@@ -118,6 +118,7 @@ function notific(content) {
     ondone() {}, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
   });
 }
+
 // 开始批量投递
 const batchHandler = (el) => {
   if (!runT) {
