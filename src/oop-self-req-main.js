@@ -11,7 +11,8 @@
 // @include      https://www.zhipin.com
 // @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js
+// #require      https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js
+// @require      https://liangbizhi.github.io/js2wordcloud/dist/js2wordcloud.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -362,7 +363,7 @@ class OperationPanel {
      */
     renderOperationPanel() {
 
-        this.worldCloudCanvas = DOMApi.createTag("canvas", "", "height: 300px;")
+        this.worldCloudCanvas = DOMApi.createTag("div", "", "height: 400px;")
         this.worldCloudCanvas.id = "worldCloudCanvas"
 
         logger.debug("操作面板开始初始化")
@@ -1360,17 +1361,24 @@ class JobWordCloud {
     static generateWorldCloudImage(canvasTagId, weightWordArr) {
         // 词云图的配置选项
         let options = {
+            tooltip: {
+                show: true,
+                formatter: function(item) {
+                    return item[0] + ': ' + item[1]
+                }
+            },
             list: weightWordArr,
             // 网格尺寸
-            gridSize: 10,
+            //gridSize: 10,
             // 权重系数
-            weightFactor: 2,
+            //weightFactor: 2,
             // 字体
             fontFamily: 'Finger Paint, cursive, sans-serif',
             // 字体颜色，也可以指定特定颜色值
-            color: '#26ad7e',
+            //color: '#26ad7e',
+            color: 'random-dark',
             // 旋转比例
-            rotateRatio: 0.2,
+            // rotateRatio: 0.2,
             // 背景颜色
             backgroundColor: 'white',
             // 形状
@@ -1381,7 +1389,9 @@ class JobWordCloud {
             drawOutOfBound: false
         };
 
-        WordCloud(document.getElementById(canvasTagId), options);
+        // WordCloud(document.getElementById(canvasTagId), options);
+        const wc = new Js2WordCloud(document.getElementById(canvasTagId), options);
+        wc.setOption(options)
     }
 
     static getKeyWorldArr(twoArr) {
