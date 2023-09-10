@@ -262,11 +262,18 @@ class DOMApi {
         tag.addEventListener(eventType, func)
     }
 
-    static delElement(name,el=document){
-        const element = el.querySelector(name)
-        if (element){
+    static delElement(name,loop=false,el=document){
+        let t = setInterval(()=>{
+            const element = el.querySelector(name)
+            if (!element){
+                if (!loop){
+                    clearInterval(t)
+                }
+                return
+            }
             element.remove()
-        }
+            clearInterval(t)
+        },1000)
     }
     static setElement(name,style,el=document){
         const element = el.querySelector(name)
@@ -448,6 +455,7 @@ class OperationPanel {
             // 按钮/搜索换位
             const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
             jobSearchBox.style.margin = "20px 0"
+            jobSearchBox.style.width= "100%"
             const city = jobConditionWrapper.querySelector(".city-area-select")
             city.querySelector(".city-area-current").style.width = "85px"
             const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
@@ -480,7 +488,9 @@ class OperationPanel {
         // 侧边悬浮框
         DOMApi.delElement(".side-bar-box")
         // 新职位发布时通知我
-        DOMApi.delElement(".subscribe-weixin-wrapper")
+        DOMApi.delElement(".subscribe-weixin-wrapper",true)
+        // 搜索栏登录框
+        DOMApi.delElement(".go-login-btn")
         // 顶部面板
         // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
         // DOMApi.setElement(".page-job-content",{width:"90%"})
@@ -495,6 +505,13 @@ class OperationPanel {
         .job-card-wrapper .clearfix:after{content: none}
         .job-card-wrapper .job-card-footer .info-desc{width: auto !important}
         .job-card-wrapper .job-card-footer .tag-list{width: auto !important;margin-right:10px}
+        .city-area-select .area-select-container.has-expand{max-height: 70px;overflow: scroll;}
+        .city-area-select.pick-up .city-area-dropdown{width: 80vw;min-width: 1030px;}
+        .job-search-box .job-search-form{width: 100%;}
+        .job-search-box .job-search-form .city-label{width: 10%;}
+        .job-search-box .job-search-form .search-input-box{width: 82%;}
+        .job-search-box .job-search-form .search-btn{width: 8%;}
+        .job-search-wrapper.fix-top .job-search-box, .job-search-wrapper.fix-top .search-condition-wrapper{width: 90%;min-width:990px;}
         `)
         logger.debug("初始化【页面美化】成功")
     }
