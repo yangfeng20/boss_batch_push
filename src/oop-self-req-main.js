@@ -193,15 +193,13 @@ class Tools {
     static semanticMatch(configArr, content) {
         for (let i = 0; i < configArr.length; i++) {
             if (!configArr[i]) {
-                return true;
+                continue
             }
             let re = new RegExp("(?<!(不|无).{0,5})" + configArr[i] + "(?!系统|软件|工具|服务)");
             if (re.test(content)) {
-                return true;
+                return configArr[i];
             }
         }
-
-        return false;
     }
 
     static bossIsActive(activeText) {
@@ -1128,9 +1126,10 @@ class JobListPageHandler {
 
             // 工作内容检查
             let jobContentExclude = this.scriptConfig.getJobContentExclude(true);
-            if (!Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)) {
+            const jobContentMismatch= Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)
+            if (jobContentMismatch) {
                 logger.debug("当前job工作内容：" + jobCardJson.postDescription)
-                logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足工作内容")
+                logger.info(`当前job被过滤：【${jobTitle}】 原因：不满足工作内容(${jobContentMismatch})`)
                 return reject(new JobNotMatchExp())
             }
 
