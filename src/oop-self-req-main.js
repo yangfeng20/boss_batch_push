@@ -18,6 +18,8 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
+// @grant        GM_cookie
 // ==/UserScript==
 
 "use strict";
@@ -68,13 +70,17 @@ class PublishStopExp extends BossBatchExp {
 
 
 class TampermonkeyApi {
+    static CUR_CK = ""
+    constructor(){
+        TampermonkeyApi.CUR_CK = GM_getValue("ck_cur", null);
+    }
 
     static GmSetValue(key, val) {
-        return GM_setValue(key, val);
+        return GM_setValue(TampermonkeyApi.CUR_CK+key, val);
     }
 
     static GmGetValue(key, defVal) {
-        return GM_getValue(key, defVal);
+        return GM_getValue(TampermonkeyApi.CUR_CK+key, defVal);
     }
 
     static GMXmlHttpRequest(options) {
@@ -82,7 +88,7 @@ class TampermonkeyApi {
     }
 
     static GmAddValueChangeListener(key, func) {
-        return GM_addValueChangeListener(key, func);
+        return GM_addValueChangeListener(TampermonkeyApi.CUR_CK+key, func);
     }
 
 }
@@ -1433,6 +1439,69 @@ class JobWordCloud {
 
 }
 
+
+GM_registerMenuCommand("切换Ck", async () => {
+    let value = GM_getValue("ck_list") || [];
+    GM_cookie("list", {}, async (list, error) => {
+        if (error === undefined) {
+            console.log(list, value);
+            // 储存覆盖老的值
+            GM_setValue("ck_list", list);
+            // 先清空 再设置
+            for (let i = 0; i < list.length; i++) {
+                list[i].url = window.location.origin;
+                await GM_cookie("delete", list[i]);
+            }
+            if (value.length) {
+                // 循环set
+                for (let i = 0; i < value.length; i++) {
+                    value[i].url = window.location.origin;
+                    await GM_cookie("set", value[i]);
+                }
+            }
+            if (GM_getValue("ck_cur", "") === "") {
+                GM_setValue("ck_cur", "_");
+            } else {
+                GM_setValue("ck_cur", "");
+            }
+            window.location.reload();
+            // window.alert("手动刷新～");
+        } else {
+            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+        }
+    });
+});
+
+GM_registerMenuCommand("清除当前Ck", () => {
+    if (GM_getValue("ck_cur", "") === "_") {
+        GM_setValue("ck_cur", "");
+    }
+    GM_cookie("list", {}, async (list, error) => {
+        if (error === undefined) {
+            // 清空
+            for (let i = 0; i < list.length; i++) {
+                list[i].url = window.location.origin;
+                // console.log(list[i]);
+                await GM_cookie("delete", list[i]);
+            }
+
+            window.location.reload();
+        } else {
+            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+        }
+    });
+});
+
+GM_registerMenuCommand("清空所有存储!", async () => {
+    if (confirm("将清空脚本全部的设置!!")) {
+        const asyncKeys = await GM_listValues();
+        for (let index in asyncKeys) {
+            console.log(asyncKeys[index]);
+            await GM_deleteValue(asyncKeys[index]);
+        }
+        window.alert("OK!");
+    }
+});
 
 (function () {
     const list_url = "web/geek/job";
