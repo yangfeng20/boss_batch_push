@@ -308,8 +308,8 @@ class OperationPanel {
         // 公司规模范围输入框lab
         this.csrInInputLab = null
 
-        // 词云图canvas
-        this.worldCloudCanvas = null
+        // 词云图dModal
+        this.worldCloudModal = null
 
 
         this.topTitle = null
@@ -362,9 +362,6 @@ class OperationPanel {
      * 渲染操作面板
      */
     renderOperationPanel() {
-
-        this.worldCloudCanvas = DOMApi.createTag("div", "", "height: 400px;")
-        this.worldCloudCanvas.id = "worldCloudCanvas"
 
         logger.debug("操作面板开始初始化")
         // 1.创建操作按钮并添加到按钮容器中【以下绑定事件处理函数均采用箭头函数作为中转，避免this执行事件对象】
@@ -435,7 +432,7 @@ class OperationPanel {
         // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
-        operationPanel.appendChild(this.worldCloudCanvas)
+        operationPanel.appendChild(this.buildWordCloudModel())
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -596,6 +593,24 @@ class OperationPanel {
         return DOMApi.createTag('p', '', 'font-size: 20px;color: rgb(64, 158, 255);margin-left: 50px;');
     }
 
+    buildWordCloudModel(){
+        const modal = DOMApi.createTag("div", `
+          <div class="dialog-layer"></div>
+          <div class="dialog-container" style="width: 80%;height: 80%;">
+            <div class="dialog-header">
+              <h3>词云图</h3>
+               <span class="close"><i class="icon-close"></i></span>
+            </div>
+            <div id="worldCloudCanvas" class="dialog-body" style="height: 98%;width: 100%"></div>
+          </div>
+        `,"display: none;")
+        modal.className = "dialog-wrap"
+        modal.querySelector(".close").onclick = function() {
+            modal.style.display = "none";
+        }
+        this.worldCloudModal = modal
+        return modal
+    }
 
     /*-------------------------------------------------操作面板事件处理--------------------------------------------------*/
 
@@ -650,6 +665,7 @@ class OperationPanel {
                 this.refreshShow("生成词云图【构建数据中】")
                 let weightWordArr = JobWordCloud.buildWord(jobLabelArr);
                 logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+                this.worldCloudModal.style.display = "flex"
                 JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
                 this.refreshShow("生成词云图【完成】")
             })
@@ -1382,7 +1398,9 @@ class JobWordCloud {
             // 背景颜色
             backgroundColor: 'white',
             // 形状
-            shape: 'square',
+            //shape: 'square',
+            shape: 'circle',
+            ellipticity: 1,
             // 随机排列词语
             shuffle: true,
             // 不绘制超出容器边界的词语
