@@ -20,6 +20,7 @@
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
 // @grant        GM_cookie
+// @grant        GM_notification
 // ==/UserScript==
 
 "use strict";
@@ -90,7 +91,21 @@ class TampermonkeyApi {
     static GmAddValueChangeListener(key, func) {
         return GM_addValueChangeListener(TampermonkeyApi.CUR_CK+key, func);
     }
-
+    static GmNotification(content){
+        GM_notification({
+                title: "Boss直聘批量投简历",
+                image:
+                "https://img.bosszhipin.com/beijin/mcs/banner/3e9d37e9effaa2b6daf43f3f03f7cb15cfcd208495d565ef66e7dff9f98764da.jpg",
+                text: content,
+                highlight: true, // 布尔值，是否突出显示发送通知的选项卡
+                silent: true, // 布尔值，是否播放声音
+                timeout: 10000, // 设置通知隐藏时间
+                onclick: function () {
+                    console.log("点击了通知");
+                },
+        ondone() {}, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
+        });
+    }
 }
 
 class Tools {
@@ -330,6 +345,7 @@ class OperationPanel {
             "2.生成Job词云图：获取当前页面的所有job详情，并进行分词权重分析；生成岗位热点词汇词云图；帮助分析简历匹配度",
             "3.保存配置：保持下方脚本筛选项，用于后续直接使用当前配置。",
             "4.过滤不活跃Boss：打开后会自动过滤掉最近未活跃的Boss发布的工作。以免浪费每天的100次机会。",
+            "5.可以在网站管理中打开通知权限,当停止时会自动发送桌面端通知提醒。",
             "😏",
             "脚本筛选项介绍：",
             "公司名包含：投递工作的公司名一定包含在当前集合中，模糊匹配，多个使用逗号分割。这个一般不用，如果使用了也就代表只投这些公司的岗位。例子：【阿里,华为】",
@@ -986,20 +1002,23 @@ class JobListPageHandler {
 
             if (!this.publishState) {
                 logger.info("投递结束")
+                TampermonkeyApi.GmNotification("投递结束")
                 this.operationPanel.refreshShow("投递停止")
                 this.changeBatchPublishState(false);
                 return;
             }
             if (!BossDOMApi.nextPage()) {
                 logger.info("投递结束，没有下一页")
+                TampermonkeyApi.GmNotification("投递结束，没有下一页")
+                this.operationPanel.refreshShow("投递结束，没有下一页")
                 this.changeBatchPublishState(false);
                 return;
             }
-
+            this.operationPanel.refreshShow("开始等待 10 秒钟,进行下一页")
             // 点击下一页，需要等待页面元素变化，否则将重复拿到当前页的jobList
             setTimeout(() => {
                 this.loopPublish()
-            }, 1000)
+            }, 10000)
         }, 3000);
     }
 
@@ -1156,6 +1175,7 @@ class JobListPageHandler {
             // 检查投递限制
             let pushLimit = TampermonkeyApi.GmGetValue(ScriptConfig.PUSH_LIMIT, false);
             if (pushLimit) {
+                this.changeBatchPublishState(false)
                 return reject(new PublishLimitExp("boss投递限制每天100次"))
             }
 
