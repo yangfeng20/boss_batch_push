@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.1.7
+// @version      1.1.8
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -551,8 +551,8 @@ class OperationPanel {
 
     buildDocDiv() {
         const docDiv = DOMApi.createTag("div", "", "margin: 10px 0px; width: 100%;")
-        let txtDiv = DOMApi.createTag("div", "", "display: none;");
-        const title = DOMApi.createTag("h3", "操作说明(点击展开)", "margin: 10px 0px;cursor: pointer")
+        let txtDiv = DOMApi.createTag("div", "", "display: block;");
+        const title = DOMApi.createTag("h3", "操作说明(点击关闭)", "margin: 10px 0px;cursor: pointer")
 
         docDiv.appendChild(title)
         docDiv.appendChild(txtDiv)
