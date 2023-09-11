@@ -11,12 +11,16 @@
 // @include      https://www.zhipin.com
 // @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js
+// #require      https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js
+// @require      https://liangbizhi.github.io/js2wordcloud/dist/js2wordcloud.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
+// @grant        GM_cookie
+// @grant        GM_notification
 // ==/UserScript==
 
 "use strict";
@@ -67,13 +71,17 @@ class PublishStopExp extends BossBatchExp {
 
 
 class TampermonkeyApi {
+    static CUR_CK = ""
+    constructor(){
+        TampermonkeyApi.CUR_CK = GM_getValue("ck_cur", null);
+    }
 
     static GmSetValue(key, val) {
-        return GM_setValue(key, val);
+        return GM_setValue(TampermonkeyApi.CUR_CK+key, val);
     }
 
     static GmGetValue(key, defVal) {
-        return GM_getValue(key, defVal);
+        return GM_getValue(TampermonkeyApi.CUR_CK+key, defVal);
     }
 
     static GMXmlHttpRequest(options) {
@@ -81,9 +89,23 @@ class TampermonkeyApi {
     }
 
     static GmAddValueChangeListener(key, func) {
-        return GM_addValueChangeListener(key, func);
+        return GM_addValueChangeListener(TampermonkeyApi.CUR_CK+key, func);
     }
-
+    static GmNotification(content){
+        GM_notification({
+                title: "Boss直聘批量投简历",
+                image:
+                "https://img.bosszhipin.com/beijin/mcs/banner/3e9d37e9effaa2b6daf43f3f03f7cb15cfcd208495d565ef66e7dff9f98764da.jpg",
+                text: content,
+                highlight: true, // 布尔值，是否突出显示发送通知的选项卡
+                silent: true, // 布尔值，是否播放声音
+                timeout: 10000, // 设置通知隐藏时间
+                onclick: function () {
+                    console.log("点击了通知");
+                },
+        ondone() {}, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
+        });
+    }
 }
 
 class Tools {
@@ -171,15 +193,13 @@ class Tools {
     static semanticMatch(configArr, content) {
         for (let i = 0; i < configArr.length; i++) {
             if (!configArr[i]) {
-                return true;
+                continue
             }
             let re = new RegExp("(?<!(不|无).{0,5})" + configArr[i] + "(?!系统|软件|工具|服务)");
             if (re.test(content)) {
-                return true;
+                return configArr[i];
             }
         }
-
-        return false;
     }
 
     static bossIsActive(activeText) {
@@ -262,11 +282,18 @@ class DOMApi {
         tag.addEventListener(eventType, func)
     }
 
-    static delElement(name,el=document){
-        const element = el.querySelector(name)
-        if (element){
+    static delElement(name,loop=false,el=document){
+        let t = setInterval(()=>{
+            const element = el.querySelector(name)
+            if (!element){
+                if (!loop){
+                    clearInterval(t)
+                }
+                return
+            }
             element.remove()
-        }
+            clearInterval(t)
+        },1000)
     }
     static setElement(name,style,el=document){
         const element = el.querySelector(name)
@@ -300,8 +327,8 @@ class OperationPanel {
         // 公司规模范围输入框lab
         this.csrInInputLab = null
 
-        // 词云图canvas
-        this.worldCloudCanvas = null
+        // 词云图dModal
+        this.worldCloudModal = null
 
 
         this.topTitle = null
@@ -316,6 +343,7 @@ class OperationPanel {
             "2.生成Job词云图：获取当前页面的所有job详情，并进行分词权重分析；生成岗位热点词汇词云图；帮助分析简历匹配度",
             "3.保存配置：保持下方脚本筛选项，用于后续直接使用当前配置。",
             "4.过滤不活跃Boss：打开后会自动过滤掉最近未活跃的Boss发布的工作。以免浪费每天的100次机会。",
+            "5.可以在网站管理中打开通知权限,当停止时会自动发送桌面端通知提醒。",
             "😏",
             "脚本筛选项介绍：",
             "公司名包含：投递工作的公司名一定包含在当前集合中，模糊匹配，多个使用逗号分割。这个一般不用，如果使用了也就代表只投这些公司的岗位。例子：【阿里,华为】",
@@ -354,9 +382,6 @@ class OperationPanel {
      * 渲染操作面板
      */
     renderOperationPanel() {
-
-        this.worldCloudCanvas = DOMApi.createTag("canvas", "", "height: 300px;")
-        this.worldCloudCanvas.id = "worldCloudCanvas"
 
         logger.debug("操作面板开始初始化")
         // 1.创建操作按钮并添加到按钮容器中【以下绑定事件处理函数均采用箭头函数作为中转，避免this执行事件对象】
@@ -427,7 +452,7 @@ class OperationPanel {
         // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
-        operationPanel.appendChild(this.worldCloudCanvas)
+        operationPanel.appendChild(this.buildWordCloudModel())
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -448,6 +473,7 @@ class OperationPanel {
             // 按钮/搜索换位
             const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
             jobSearchBox.style.margin = "20px 0"
+            jobSearchBox.style.width= "100%"
             const city = jobConditionWrapper.querySelector(".city-area-select")
             city.querySelector(".city-area-current").style.width = "85px"
             const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
@@ -480,7 +506,9 @@ class OperationPanel {
         // 侧边悬浮框
         DOMApi.delElement(".side-bar-box")
         // 新职位发布时通知我
-        DOMApi.delElement(".subscribe-weixin-wrapper")
+        DOMApi.delElement(".subscribe-weixin-wrapper",true)
+        // 搜索栏登录框
+        DOMApi.delElement(".go-login-btn")
         // 顶部面板
         // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
         // DOMApi.setElement(".page-job-content",{width:"90%"})
@@ -495,6 +523,13 @@ class OperationPanel {
         .job-card-wrapper .clearfix:after{content: none}
         .job-card-wrapper .job-card-footer .info-desc{width: auto !important}
         .job-card-wrapper .job-card-footer .tag-list{width: auto !important;margin-right:10px}
+        .city-area-select .area-select-container.has-expand{max-height: 70px;overflow: scroll;}
+        .city-area-select.pick-up .city-area-dropdown{width: 80vw;min-width: 1030px;}
+        .job-search-box .job-search-form{width: 100%;}
+        .job-search-box .job-search-form .city-label{width: 10%;}
+        .job-search-box .job-search-form .search-input-box{width: 82%;}
+        .job-search-box .job-search-form .search-btn{width: 8%;}
+        .job-search-wrapper.fix-top .job-search-box, .job-search-wrapper.fix-top .search-condition-wrapper{width: 90%;min-width:990px;}
         `)
         logger.debug("初始化【页面美化】成功")
     }
@@ -578,6 +613,24 @@ class OperationPanel {
         return DOMApi.createTag('p', '', 'font-size: 20px;color: rgb(64, 158, 255);margin-left: 50px;');
     }
 
+    buildWordCloudModel(){
+        const modal = DOMApi.createTag("div", `
+          <div class="dialog-layer"></div>
+          <div class="dialog-container" style="width: 80%;height: 80%;">
+            <div class="dialog-header">
+              <h3>词云图</h3>
+               <span class="close"><i class="icon-close"></i></span>
+            </div>
+            <div id="worldCloudCanvas" class="dialog-body" style="height: 98%;width: 100%"></div>
+          </div>
+        `,"display: none;")
+        modal.className = "dialog-wrap"
+        modal.querySelector(".close").onclick = function() {
+            modal.style.display = "none";
+        }
+        this.worldCloudModal = modal
+        return modal
+    }
 
     /*-------------------------------------------------操作面板事件处理--------------------------------------------------*/
 
@@ -632,6 +685,7 @@ class OperationPanel {
                 this.refreshShow("生成词云图【构建数据中】")
                 let weightWordArr = JobWordCloud.buildWord(jobLabelArr);
                 logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+                this.worldCloudModal.style.display = "flex"
                 JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
                 this.refreshShow("生成词云图【完成】")
             })
@@ -946,20 +1000,23 @@ class JobListPageHandler {
 
             if (!this.publishState) {
                 logger.info("投递结束")
+                TampermonkeyApi.GmNotification("投递结束")
                 this.operationPanel.refreshShow("投递停止")
                 this.changeBatchPublishState(false);
                 return;
             }
             if (!BossDOMApi.nextPage()) {
                 logger.info("投递结束，没有下一页")
+                TampermonkeyApi.GmNotification("投递结束，没有下一页")
+                this.operationPanel.refreshShow("投递结束，没有下一页")
                 this.changeBatchPublishState(false);
                 return;
             }
-
+            this.operationPanel.refreshShow("开始等待 10 秒钟,进行下一页")
             // 点击下一页，需要等待页面元素变化，否则将重复拿到当前页的jobList
             setTimeout(() => {
                 this.loopPublish()
-            }, 1000)
+            }, 10000)
         }, 3000);
     }
 
@@ -1069,9 +1126,10 @@ class JobListPageHandler {
 
             // 工作内容检查
             let jobContentExclude = this.scriptConfig.getJobContentExclude(true);
-            if (!Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)) {
+            const jobContentMismatch= Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)
+            if (jobContentMismatch) {
                 logger.debug("当前job工作内容：" + jobCardJson.postDescription)
-                logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足工作内容")
+                logger.info(`当前job被过滤：【${jobTitle}】 原因：不满足工作内容(${jobContentMismatch})`)
                 return reject(new JobNotMatchExp())
             }
 
@@ -1116,6 +1174,7 @@ class JobListPageHandler {
             // 检查投递限制
             let pushLimit = TampermonkeyApi.GmGetValue(ScriptConfig.PUSH_LIMIT, false);
             if (pushLimit) {
+                this.changeBatchPublishState(false)
                 return reject(new PublishLimitExp("boss投递限制每天100次"))
             }
 
@@ -1343,28 +1402,39 @@ class JobWordCloud {
     static generateWorldCloudImage(canvasTagId, weightWordArr) {
         // 词云图的配置选项
         let options = {
+            tooltip: {
+                show: true,
+                formatter: function(item) {
+                    return item[0] + ': ' + item[1]
+                }
+            },
             list: weightWordArr,
             // 网格尺寸
-            gridSize: 10,
+            //gridSize: 10,
             // 权重系数
-            weightFactor: 2,
+            //weightFactor: 2,
             // 字体
             fontFamily: 'Finger Paint, cursive, sans-serif',
             // 字体颜色，也可以指定特定颜色值
-            color: '#26ad7e',
+            //color: '#26ad7e',
+            color: 'random-dark',
             // 旋转比例
-            rotateRatio: 0.2,
+            // rotateRatio: 0.2,
             // 背景颜色
             backgroundColor: 'white',
             // 形状
-            shape: 'square',
+            //shape: 'square',
+            shape: 'circle',
+            ellipticity: 1,
             // 随机排列词语
             shuffle: true,
             // 不绘制超出容器边界的词语
             drawOutOfBound: false
         };
 
-        WordCloud(document.getElementById(canvasTagId), options);
+        // WordCloud(document.getElementById(canvasTagId), options);
+        const wc = new Js2WordCloud(document.getElementById(canvasTagId), options);
+        wc.setOption(options)
     }
 
     static getKeyWorldArr(twoArr) {
@@ -1388,6 +1458,69 @@ class JobWordCloud {
 
 }
 
+
+GM_registerMenuCommand("切换Ck", async () => {
+    let value = GM_getValue("ck_list") || [];
+    GM_cookie("list", {}, async (list, error) => {
+        if (error === undefined) {
+            console.log(list, value);
+            // 储存覆盖老的值
+            GM_setValue("ck_list", list);
+            // 先清空 再设置
+            for (let i = 0; i < list.length; i++) {
+                list[i].url = window.location.origin;
+                await GM_cookie("delete", list[i]);
+            }
+            if (value.length) {
+                // 循环set
+                for (let i = 0; i < value.length; i++) {
+                    value[i].url = window.location.origin;
+                    await GM_cookie("set", value[i]);
+                }
+            }
+            if (GM_getValue("ck_cur", "") === "") {
+                GM_setValue("ck_cur", "_");
+            } else {
+                GM_setValue("ck_cur", "");
+            }
+            window.location.reload();
+            // window.alert("手动刷新～");
+        } else {
+            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+        }
+    });
+});
+
+GM_registerMenuCommand("清除当前Ck", () => {
+    if (GM_getValue("ck_cur", "") === "_") {
+        GM_setValue("ck_cur", "");
+    }
+    GM_cookie("list", {}, async (list, error) => {
+        if (error === undefined) {
+            // 清空
+            for (let i = 0; i < list.length; i++) {
+                list[i].url = window.location.origin;
+                // console.log(list[i]);
+                await GM_cookie("delete", list[i]);
+            }
+
+            window.location.reload();
+        } else {
+            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+        }
+    });
+});
+
+GM_registerMenuCommand("清空所有存储!", async () => {
+    if (confirm("将清空脚本全部的设置!!")) {
+        const asyncKeys = await GM_listValues();
+        for (let index in asyncKeys) {
+            console.log(asyncKeys[index]);
+            await GM_deleteValue(asyncKeys[index]);
+        }
+        window.alert("OK!");
+    }
+});
 
 (function () {
     const list_url = "web/geek/job";
