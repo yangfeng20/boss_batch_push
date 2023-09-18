@@ -326,9 +326,10 @@ class OperationPanel {
         // 公司规模范围输入框lab
         this.csrInInputLab = null
 
-        // 词云图dModal
+        // 词云图
         this.worldCloudModal = null
-
+        this.worldCloudState = false // false:标签 true:内容
+        this.worldCloudAllBtn = null
 
         this.topTitle = null
 
@@ -400,9 +401,10 @@ class OperationPanel {
         })
 
         // 生成Job词云图按钮
-        let generateImgBtn = DOMApi.createTag("div", "生成Job词云图", btnCssText);
+        let generateImgBtn = DOMApi.createTag("div", "生成词云图", btnCssText);
         DOMApi.eventListener(generateImgBtn, "click", () => {
-            this.generateImgHandlerJobLabel()
+            this.worldCloudModal.style.display = "flex"
+            this.refreshQuantity()
         })
 
         // 过滤不活跃boss按钮
@@ -451,7 +453,8 @@ class OperationPanel {
         // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
         operationPanel.appendChild(this.showTable)
-        operationPanel.appendChild(this.buildWordCloudModel())
+        // 词云图模态框 加到根节点
+        document.body.appendChild(this.buildWordCloudModel())
 
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
@@ -508,6 +511,8 @@ class OperationPanel {
         DOMApi.delElement(".subscribe-weixin-wrapper",true)
         // 搜索栏登录框
         DOMApi.delElement(".go-login-btn")
+        // 搜索栏去APP
+        DOMApi.delElement(".job-search-scan",true)
         // 顶部面板
         // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
         // DOMApi.setElement(".page-job-content",{width:"90%"})
@@ -522,7 +527,6 @@ class OperationPanel {
         .job-card-wrapper .clearfix:after{content: none}
         .job-card-wrapper .job-card-footer .info-desc{width: auto !important}
         .job-card-wrapper .job-card-footer .tag-list{width: auto !important;margin-right:10px}
-        .city-area-select .area-select-container.has-expand{max-height: 70px;overflow: scroll;}
         .city-area-select.pick-up .city-area-dropdown{width: 80vw;min-width: 1030px;}
         .job-search-box .job-search-form{width: 100%;}
         .job-search-box .job-search-form .city-label{width: 10%;}
@@ -540,6 +544,9 @@ class OperationPanel {
         this.showTable.innerHTML = "当前操作：" + text
     }
 
+    refreshQuantity() {
+        this.worldCloudAllBtn.innerHTML = `生成全部(${this.jobListHandler.cacheSize()}个)`
+    }
 
     /*-------------------------------------------------构建复合DOM元素--------------------------------------------------*/
 
@@ -613,22 +620,68 @@ class OperationPanel {
     }
 
     buildWordCloudModel(){
-        const modal = DOMApi.createTag("div", `
+        this.worldCloudModal = DOMApi.createTag("div", `
           <div class="dialog-layer"></div>
           <div class="dialog-container" style="width: 80%;height: 80%;">
             <div class="dialog-header">
               <h3>词云图</h3>
                <span class="close"><i class="icon-close"></i></span>
             </div>
-            <div id="worldCloudCanvas" class="dialog-body" style="height: 98%;width: 100%"></div>
+            <div class="dialog-body" style="height: 98%;width: 100%;display: flex;flex-direction: column;">
+               <div id="worldCloudCanvas" class="dialog-body" style="height: 100%;width: 100%;flex-grow: inherit;"></div>
+            </div>
           </div>
         `,"display: none;")
-        modal.className = "dialog-wrap"
-        modal.querySelector(".close").onclick = function() {
-            modal.style.display = "none";
+        const model = this.worldCloudModal
+        model.className = "dialog-wrap"
+        model.querySelector(".close").onclick = function() {
+            model.style.display = "none";
         }
-        this.worldCloudModal = modal
-        return modal
+        const body = model.querySelector(".dialog-body")
+        const div = DOMApi.createTag("div")
+        let btnCssText = "display: inline-block;border-radius: 4px;background: #e5f8f8;color: #00a6a7; text-decoration: none;margin: 0px 20px;padding: 6px 12px;cursor: pointer";
+        // 当前状态
+        let stateBtn = DOMApi.createTag("div", "状态: 工作标签", btnCssText);
+        DOMApi.eventListener(stateBtn, "click", () => {
+            if (this.worldCloudState){
+                stateBtn.innerHTML = "状态: 工作标签"
+            }else{
+                stateBtn.innerHTML = "状态: 工作内容"
+            }
+            this.worldCloudState = !this.worldCloudState
+        })
+        // 爬取当前页面生成词云
+        let curBtn = DOMApi.createTag("div", "生成当前页", btnCssText);
+        DOMApi.eventListener(curBtn, "click", () => {
+            if (this.worldCloudState){
+                this.generateImgHandler()
+            }else{
+                this.generateImgHandlerJobLabel()
+            }
+        })
+        // 根据已爬取的数据生成词云
+        let allBtn = DOMApi.createTag("div", "生成全部(0个)", btnCssText);
+        DOMApi.eventListener(allBtn, "click", () => {
+            if (this.worldCloudState){
+                // this.generateImgHandlerAll()
+                window.alert("卡顿严重,数据量大已禁用,请用标签模式")
+            }else{
+                this.generateImgHandlerJobLabelAll()
+            }
+        })
+        this.worldCloudAllBtn = allBtn
+        // 清空已爬取的数据
+        let delBtn = DOMApi.createTag("div", "清空数据", btnCssText);
+        DOMApi.eventListener(delBtn, "click", () => {
+            this.jobListHandler.cacheClear()
+            this.refreshQuantity()
+        })
+        div.appendChild(stateBtn)
+        div.appendChild(curBtn)
+        div.appendChild(allBtn)
+        div.appendChild(delBtn)
+        body.insertBefore(div, body.firstElementChild)
+        return this.worldCloudModal
     }
 
     /*-------------------------------------------------操作面板事件处理--------------------------------------------------*/
@@ -689,6 +742,49 @@ class OperationPanel {
                 this.refreshShow("生成词云图【完成】")
             })
     }
+
+    /**
+     * 生成All词云图
+     * 使用的数据源为 job工作内容，进行分词
+     */
+    generateImgHandlerAll() {
+        let allJobContent = ""
+        this.jobListHandler.cache.forEach((val)=>{
+            allJobContent +=  val.postDescription
+        })
+        Promise.resolve()
+            .then(() => {
+                this.refreshShow("生成词云图【构建数据中】")
+                return JobWordCloud.participle(allJobContent)
+            }).then(worldArr => {
+            let weightWordArr = JobWordCloud.buildWord(worldArr);
+            logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+            JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+            this.refreshShow("生成词云图【完成】")
+        })
+    }
+
+    /**
+     * 生成All词云图
+     * 使用的数据源为 job标签，并且不进行分词，直接计算权重
+     */
+    generateImgHandlerJobLabelAll() {
+        let jobLabelArr = []
+        this.jobListHandler.cache.forEach((val)=>{
+            jobLabelArr.push(...val.jobLabels)
+        })
+        this.refreshShow("生成词云图【获取Job数据中】")
+        Promise.resolve()
+            .then(() => {
+                this.refreshShow("生成词云图【构建数据中】")
+                let weightWordArr = JobWordCloud.buildWord(jobLabelArr);
+                logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+                this.worldCloudModal.style.display = "flex"
+                JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+                this.refreshShow("生成词云图【完成】")
+            })
+    }
+
 
     readInputConfig() {
         this.scriptConfig.setCompanyNameInclude(DOMApi.getInputVal(this.cnInInputLab))
@@ -943,6 +1039,12 @@ class BossDOMApi {
         return jobTag.querySelector(".job-card-left").href;
     }
 
+    static getUniqueKey(jobTag) {
+        const title = this.getJobTitle(jobTag)
+        const company = this.getCompanyName(jobTag)
+        return `${title}--${company}`
+    }
+
     static nextPage() {
         let nextPageBtn = document.querySelector(".ui-icon-arrow-right");
 
@@ -966,6 +1068,7 @@ class JobListPageHandler {
         this.publishState = false
         this.nextPage = false
         this.mock = false
+        this.cache = new Map()
     }
 
     /**
@@ -1091,16 +1194,25 @@ class JobListPageHandler {
         })
     }
 
-
+    cacheClear(){
+        this.cache.clear()
+    }
+    cacheSize(){
+        return  this.cache.size
+    }
     reqJobDetail(jobTag, retries = 3) {
         return new Promise((resolve, reject) => {
             if (retries === 0) {
                 return reject(new FetchJobDetailFailExp());
             }
-
+            const key = BossDOMApi.getUniqueKey(jobTag)
+            if (this.cache.has(key)){
+                return resolve(this.cache.get(key))
+            }
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
             axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, { timeout: 5000 })
                 .then(resp => {
+                    this.cache.set(key,resp.data.zpData.jobCard)
                     return resolve(resp.data.zpData.jobCard);
                 }).catch(error => {
                     logger.debug("获取详情页异常正在重试:", error)
@@ -1411,7 +1523,7 @@ class JobWordCloud {
             // 网格尺寸
             //gridSize: 10,
             // 权重系数
-            //weightFactor: 2,
+            weightFactor: 2,
             // 字体
             fontFamily: 'Finger Paint, cursive, sans-serif',
             // 字体颜色，也可以指定特定颜色值
@@ -1432,7 +1544,7 @@ class JobWordCloud {
         };
 
         // WordCloud(document.getElementById(canvasTagId), options);
-        const wc = new Js2WordCloud(document.getElementById(canvasTagId), options);
+        const wc = new Js2WordCloud(document.getElementById(canvasTagId));
         wc.setOption(options)
     }
 
