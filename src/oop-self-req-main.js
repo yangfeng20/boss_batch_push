@@ -24,7 +24,7 @@
 
 "use strict";
 
-let logger = Logger.log("info")
+let logger = Logger.log("debug")
 
 class BossBatchExp extends Error {
     constructor(msg) {
@@ -71,16 +71,18 @@ class PublishStopExp extends BossBatchExp {
 
 class TampermonkeyApi {
     static CUR_CK = ""
-    constructor(){
-        TampermonkeyApi.CUR_CK = GM_getValue("ck_cur", null);
+
+    constructor() {
+        // fix 还未创建对象时，CUR_CK为空字符串，创建完对象之后【如果没有配置，则为null】导致key前缀不一致
+        TampermonkeyApi.CUR_CK = GM_getValue("ck_cur", "");
     }
 
     static GmSetValue(key, val) {
-        return GM_setValue(TampermonkeyApi.CUR_CK+key, val);
+        return GM_setValue(TampermonkeyApi.CUR_CK + key, val);
     }
 
     static GmGetValue(key, defVal) {
-        return GM_getValue(TampermonkeyApi.CUR_CK+key, defVal);
+        return GM_getValue(TampermonkeyApi.CUR_CK + key, defVal);
     }
 
     static GMXmlHttpRequest(options) {
@@ -88,21 +90,23 @@ class TampermonkeyApi {
     }
 
     static GmAddValueChangeListener(key, func) {
-        return GM_addValueChangeListener(TampermonkeyApi.CUR_CK+key, func);
+        return GM_addValueChangeListener(TampermonkeyApi.CUR_CK + key, func);
     }
-    static GmNotification(content){
+
+    static GmNotification(content) {
         GM_notification({
-                title: "Boss直聘批量投简历",
-                image:
+            title: "Boss直聘批量投简历",
+            image:
                 "https://img.bosszhipin.com/beijin/mcs/banner/3e9d37e9effaa2b6daf43f3f03f7cb15cfcd208495d565ef66e7dff9f98764da.jpg",
-                text: content,
-                highlight: true, // 布尔值，是否突出显示发送通知的选项卡
-                silent: true, // 布尔值，是否播放声音
-                timeout: 10000, // 设置通知隐藏时间
-                onclick: function () {
-                    console.log("点击了通知");
-                },
-        ondone() {}, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
+            text: content,
+            highlight: true, // 布尔值，是否突出显示发送通知的选项卡
+            silent: true, // 布尔值，是否播放声音
+            timeout: 10000, // 设置通知隐藏时间
+            onclick: function () {
+                console.log("点击了通知");
+            },
+            ondone() {
+            }, // 在通知关闭（无论这是由超时还是单击触发）或突出显示选项卡时调用
         });
     }
 }
@@ -281,23 +285,24 @@ class DOMApi {
         tag.addEventListener(eventType, func)
     }
 
-    static delElement(name,loop=false,el=document){
-        let t = setInterval(()=>{
+    static delElement(name, loop = false, el = document) {
+        let t = setInterval(() => {
             const element = el.querySelector(name)
-            if (!element){
-                if (!loop){
+            if (!element) {
+                if (!loop) {
                     clearInterval(t)
                 }
                 return
             }
             element.remove()
             clearInterval(t)
-        },1000)
+        }, 1000)
     }
-    static setElement(name,style,el=document){
+
+    static setElement(name, style, el = document) {
         const element = el.querySelector(name)
-        if (element){
-            for (let atr in style){
+        if (element) {
+            for (let atr in style) {
                 element.style[atr] = style[atr]
             }
         }
@@ -311,6 +316,7 @@ class OperationPanel {
         // button
         this.batchPushBtn = null
         this.activeSwitchBtn = null
+        this.sendSelfGreetSwitchBtn = null
 
         // inputLab
         // 公司名包含输入框lab
@@ -325,6 +331,8 @@ class OperationPanel {
         this.srInInputLab = null
         // 公司规模范围输入框lab
         this.csrInInputLab = null
+        // 自定义招呼语lab
+        this.selfGreetInputLab = null
 
         // 词云图
         this.worldCloudModal = null
@@ -335,6 +343,8 @@ class OperationPanel {
 
         // boss活跃度检测
         this.bossActiveState = true;
+        // 发送自定义招呼语
+        this.sendSelfGreet = false;
 
         // 文档说明
         this.docTextArr = [
@@ -407,10 +417,16 @@ class OperationPanel {
             this.refreshQuantity()
         })
 
+        // 投递后发送自定义打招呼语句
+        this.sendSelfGreetSwitchBtn = DOMApi.createTag("div", "发送自定义打招呼语句", btnCssText);
+        DOMApi.eventListener(this.sendSelfGreetSwitchBtn, "click", () => {
+            this.sendSelfGreetSwitchBtnHandler(!this.sendSelfGreet)
+        })
+        this.sendSelfGreetSwitchBtnHandler(TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false))
+
         // 过滤不活跃boss按钮
-        let activeSwitchBtn = DOMApi.createTag("div", "活跃度过滤", btnCssText);
-        this.activeSwitchBtn = activeSwitchBtn
-        DOMApi.eventListener(activeSwitchBtn, "click", () => {
+        this.activeSwitchBtn = DOMApi.createTag("div", "活跃度过滤", btnCssText);
+        DOMApi.eventListener(this.activeSwitchBtn, "click", () => {
             this.activeSwitchBtnHandler(!this.bossActiveState)
         })
         // 默认开启活跃校验
@@ -430,6 +446,7 @@ class OperationPanel {
         this.jcExInputLab = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
+        this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet());
 
         let inputContainerDiv = DOMApi.createTag("div", "", "margin: 10px 0px;");
         inputContainerDiv.appendChild(this.cnInInputLab)
@@ -438,6 +455,7 @@ class OperationPanel {
         inputContainerDiv.appendChild(this.jcExInputLab)
         inputContainerDiv.appendChild(this.srInInputLab)
         inputContainerDiv.appendChild(this.csrInInputLab)
+        inputContainerDiv.appendChild(this.selfGreetInputLab)
 
         // 进度显示
         this.showTable = this.buildShowTable();
@@ -450,8 +468,9 @@ class OperationPanel {
         // 筛选输入框
         // iframe【详情页投递内部页】
         operationPanel.appendChild(this.buildDocDiv())
-        // operationPanel.appendChild(btnContainerDiv)
         operationPanel.appendChild(inputContainerDiv)
+        // 发送自定义招呼语的iframe
+        operationPanel.appendChild(this.buildMsgPageIframe())
         operationPanel.appendChild(this.showTable)
         // 词云图模态框 加到根节点
         document.body.appendChild(this.buildWordCloudModel())
@@ -475,7 +494,7 @@ class OperationPanel {
             // 按钮/搜索换位
             const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
             jobSearchBox.style.margin = "20px 0"
-            jobSearchBox.style.width= "100%"
+            jobSearchBox.style.width = "100%"
             const city = jobConditionWrapper.querySelector(".city-area-select")
             city.querySelector(".city-area-current").style.width = "85px"
             const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
@@ -487,7 +506,7 @@ class OperationPanel {
             })
             filter.appendChild(DOMApi.createTag("div", "", "clear:both"))
             cityAreaDropdown.appendChild(filter)
-            const bttt = [batchPushBtn, generateImgBtn, storeConfigBtn, activeSwitchBtn]
+            const bttt = [batchPushBtn, generateImgBtn, storeConfigBtn, this.activeSwitchBtn, this.sendSelfGreetSwitchBtn]
             bttt.forEach(item => {
                 jobConditionWrapper.appendChild(item);
             })
@@ -502,17 +521,17 @@ class OperationPanel {
     /**
      * 页面美化
      */
-    pageBeautification(){
+    pageBeautification() {
         // 侧栏
         DOMApi.delElement(".job-side-wrapper")
         // 侧边悬浮框
         DOMApi.delElement(".side-bar-box")
         // 新职位发布时通知我
-        DOMApi.delElement(".subscribe-weixin-wrapper",true)
+        DOMApi.delElement(".subscribe-weixin-wrapper", true)
         // 搜索栏登录框
         DOMApi.delElement(".go-login-btn")
         // 搜索栏去APP
-        DOMApi.delElement(".job-search-scan",true)
+        DOMApi.delElement(".job-search-scan", true)
         // 顶部面板
         // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
         // DOMApi.setElement(".page-job-content",{width:"90%"})
@@ -536,6 +555,7 @@ class OperationPanel {
         `)
         logger.debug("初始化【页面美化】成功")
     }
+
     registerEvent() {
         TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_COUNT, this.publishCountChangeEventHandler.bind(this))
     }
@@ -549,11 +569,6 @@ class OperationPanel {
     }
 
     /*-------------------------------------------------构建复合DOM元素--------------------------------------------------*/
-
-    hrTag() {
-        // 水平分割线
-        return DOMApi.createTag("hr", "", "margin-bottom: 20px;margin-top: 20px;width:90%;margin-left: 5%;margin-right: 5%;");
-    }
 
     buildDocDiv() {
         const docDiv = DOMApi.createTag("div", "", "margin: 10px 0px; width: 100%;")
@@ -594,24 +609,11 @@ class OperationPanel {
         return docDiv;
     }
 
-    buildAbout() {
-        let aboutDiv = DOMApi.createTag("div");
-        aboutDiv.appendChild(topTitle)
-
-        this.aboutLink.forEach((linkMap) => {
-            let about = DOMApi.createTag("p", "", "padding-top: 12px;");
-            linkMap.forEach((item) => {
-                const a = document.createElement("a");
-                a.innerText = item[0];
-                a.href = item[1];
-                a.target = "_blank";
-                a.style.margin = "0 20px 0 0";
-                about.appendChild(a);
-            });
-            aboutDiv.appendChild(about);
-        });
-
-        return aboutDiv;
+    buildMsgPageIframe() {
+        let msgPageIframe = DOMApi.createTag("iframe", "", "height:1px;width: 1px;");
+        msgPageIframe.src = 'https://www.zhipin.com/web/geek/chat';
+        msgPageIframe.id = 'msgIframe';
+        return msgPageIframe
     }
 
 
@@ -619,7 +621,7 @@ class OperationPanel {
         return DOMApi.createTag('p', '', 'font-size: 20px;color: rgb(64, 158, 255);margin-left: 50px;');
     }
 
-    buildWordCloudModel(){
+    buildWordCloudModel() {
         this.worldCloudModal = DOMApi.createTag("div", `
           <div class="dialog-layer"></div>
           <div class="dialog-container" style="width: 80%;height: 80%;">
@@ -631,10 +633,10 @@ class OperationPanel {
                <div id="worldCloudCanvas" class="dialog-body" style="height: 100%;width: 100%;flex-grow: inherit;"></div>
             </div>
           </div>
-        `,"display: none;")
+        `, "display: none;")
         const model = this.worldCloudModal
         model.className = "dialog-wrap"
-        model.querySelector(".close").onclick = function() {
+        model.querySelector(".close").onclick = function () {
             model.style.display = "none";
         }
         const body = model.querySelector(".dialog-body")
@@ -643,9 +645,9 @@ class OperationPanel {
         // 当前状态
         let stateBtn = DOMApi.createTag("div", "状态: 工作标签", btnCssText);
         DOMApi.eventListener(stateBtn, "click", () => {
-            if (this.worldCloudState){
+            if (this.worldCloudState) {
                 stateBtn.innerHTML = "状态: 工作标签"
-            }else{
+            } else {
                 stateBtn.innerHTML = "状态: 工作内容"
             }
             this.worldCloudState = !this.worldCloudState
@@ -653,19 +655,19 @@ class OperationPanel {
         // 爬取当前页面生成词云
         let curBtn = DOMApi.createTag("div", "生成当前页", btnCssText);
         DOMApi.eventListener(curBtn, "click", () => {
-            if (this.worldCloudState){
+            if (this.worldCloudState) {
                 this.generateImgHandler()
-            }else{
+            } else {
                 this.generateImgHandlerJobLabel()
             }
         })
         // 根据已爬取的数据生成词云
         let allBtn = DOMApi.createTag("div", "生成全部(0个)", btnCssText);
         DOMApi.eventListener(allBtn, "click", () => {
-            if (this.worldCloudState){
+            if (this.worldCloudState) {
                 // this.generateImgHandlerAll()
                 window.alert("卡顿严重,数据量大已禁用,请用标签模式")
-            }else{
+            } else {
                 this.generateImgHandlerJobLabelAll()
             }
         })
@@ -711,11 +713,11 @@ class OperationPanel {
                 this.refreshShow("生成词云图【构建数据中】")
                 return JobWordCloud.participle(allJobContent)
             }).then(worldArr => {
-                let weightWordArr = JobWordCloud.buildWord(worldArr);
-                logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
-                JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
-                this.refreshShow("生成词云图【完成】")
-            })
+            let weightWordArr = JobWordCloud.buildWord(worldArr);
+            logger.info("根据权重排序的world结果：", JobWordCloud.getKeyWorldArr(weightWordArr));
+            JobWordCloud.generateWorldCloudImage("worldCloudCanvas", weightWordArr)
+            this.refreshShow("生成词云图【完成】")
+        })
     }
 
     /**
@@ -749,8 +751,8 @@ class OperationPanel {
      */
     generateImgHandlerAll() {
         let allJobContent = ""
-        this.jobListHandler.cache.forEach((val)=>{
-            allJobContent +=  val.postDescription
+        this.jobListHandler.cache.forEach((val) => {
+            allJobContent += val.postDescription
         })
         Promise.resolve()
             .then(() => {
@@ -770,7 +772,7 @@ class OperationPanel {
      */
     generateImgHandlerJobLabelAll() {
         let jobLabelArr = []
-        this.jobListHandler.cache.forEach((val)=>{
+        this.jobListHandler.cache.forEach((val) => {
             jobLabelArr.push(...val.jobLabels)
         })
         this.refreshShow("生成词云图【获取Job数据中】")
@@ -793,6 +795,7 @@ class OperationPanel {
         this.scriptConfig.setJobContentExclude(DOMApi.getInputVal(this.jcExInputLab))
         this.scriptConfig.setSalaryRange(DOMApi.getInputVal(this.srInInputLab))
         this.scriptConfig.setCompanyScaleRange(DOMApi.getInputVal(this.csrInInputLab))
+        this.scriptConfig.setSelfGreet(DOMApi.getInputVal(this.selfGreetInputLab))
     }
 
     storeConfigBtnHandler() {
@@ -816,9 +819,23 @@ class OperationPanel {
         this.scriptConfig.setVal(ScriptConfig.ACTIVE_ENABLE, isOpen)
     }
 
-    publishCountChangeEventHandler(key, oldValue, newValue, isOtherScriptOther) {
+    sendSelfGreetSwitchBtnHandler(isOpen) {
+        this.sendSelfGreet = isOpen;
+        if (isOpen) {
+            this.sendSelfGreetSwitchBtn.innerText = "发送自定义招呼语:已开启";
+            this.sendSelfGreetSwitchBtn.style.backgroundColor = "rgb(215,254,195)";
+            this.sendSelfGreetSwitchBtn.style.color = "rgb(2,180,6)";
+        } else {
+            this.sendSelfGreetSwitchBtn.innerText = "发送自定义招呼语:已关闭";
+            this.sendSelfGreetSwitchBtn.style.backgroundColor = "rgb(251,224,224)";
+            this.sendSelfGreetSwitchBtn.style.color = "rgb(254,61,61)";
+        }
+        this.scriptConfig.setVal(ScriptConfig.SEND_SELF_GREET_ENABLE, isOpen)
+    }
+
+    publishCountChangeEventHandler(key, oldValue, newValue, isOtherScriptChange) {
         this.topTitle.textContent = `Boos直聘投递助手（${newValue}次） 记得 star⭐`;
-        logger.debug("投递次数变更事件", { key, oldValue, newValue, isOtherScriptOther })
+        logger.debug("投递次数变更事件", {key, oldValue, newValue, isOtherScriptChange})
     }
 
     /*-------------------------------------------------other method--------------------------------------------------*/
@@ -845,6 +862,9 @@ class ScriptConfig extends TampermonkeyApi {
     // 投递锁是否被占用，可重入；value表示当前正在投递的job
     static PUSH_LOCK = "push_lock";
 
+    static PUSH_MESSAGE = "push_message";
+    static SEND_SELF_GREET_ENABLE = "sendSelfGreetEnable";
+
     // 公司名包含输入框lab
     static cnInKey = "companyNameInclude"
     // 公司名排除输入框lab
@@ -857,6 +877,8 @@ class ScriptConfig extends TampermonkeyApi {
     static srInKey = "salaryRange"
     // 公司规模范围输入框lab
     static csrInKey = "companyScaleRange"
+    // 自定义招呼语输入框
+    static sgInKey = "sendSelfGreet"
 
 
     constructor() {
@@ -937,6 +959,10 @@ class ScriptConfig extends TampermonkeyApi {
         return this.getStrConfig(ScriptConfig.csrInKey);
     }
 
+    getSelfGreet() {
+        return this.getStrConfig(ScriptConfig.sgInKey);
+    }
+
 
     setCompanyNameInclude(val) {
         return this.configObj[ScriptConfig.cnInKey] = val.split(",");
@@ -961,6 +987,10 @@ class ScriptConfig extends TampermonkeyApi {
 
     setCompanyScaleRange(val) {
         this.configObj[ScriptConfig.csrInKey] = val;
+    }
+
+    setSelfGreet(val) {
+        this.configObj[ScriptConfig.sgInKey] = val;
     }
 
     /**
@@ -1023,6 +1053,17 @@ class BossDOMApi {
     }
 
     /**
+     * 获取当前job标签的招聘人名称以及他的职位
+     * @param jobTag
+     */
+    static getBossNameAndPosition(jobTag) {
+        let nameAndPositionTextArr = jobTag.querySelector(".info-public").innerHTML.split("<em>");
+        nameAndPositionTextArr[0] = nameAndPositionTextArr[0].trim();
+        nameAndPositionTextArr[1] = nameAndPositionTextArr[1].replace("</em>", "").trim();
+        return nameAndPositionTextArr;
+    }
+
+    /**
      * 是否为未沟通
      * @param jobTag
      */
@@ -1069,6 +1110,7 @@ class JobListPageHandler {
         this.nextPage = false
         this.mock = false
         this.cache = new Map()
+        this.selfDefCount = -1
     }
 
     /**
@@ -1136,7 +1178,6 @@ class JobListPageHandler {
         }
         let jobList = BossDOMApi.getJobList();
         logger.debug("jobList", jobList)
-
         let process = Array.from(jobList).reduce((promiseChain, jobTag) => {
             let jobTitle = BossDOMApi.getJobTitle(jobTag);
             return promiseChain
@@ -1171,6 +1212,7 @@ class JobListPageHandler {
                             throw new PublishStopExp(error.message)
 
                         case error instanceof PublishStopExp:
+                            this.changeBatchPublishState(false)
                             // 结束整个投递链路
                             throw error;
                         default:
@@ -1194,30 +1236,32 @@ class JobListPageHandler {
         })
     }
 
-    cacheClear(){
+    cacheClear() {
         this.cache.clear()
     }
-    cacheSize(){
-        return  this.cache.size
+
+    cacheSize() {
+        return this.cache.size
     }
+
     reqJobDetail(jobTag, retries = 3) {
         return new Promise((resolve, reject) => {
             if (retries === 0) {
                 return reject(new FetchJobDetailFailExp());
             }
             const key = BossDOMApi.getUniqueKey(jobTag)
-            if (this.cache.has(key)){
+            if (this.cache.has(key)) {
                 return resolve(this.cache.get(key))
             }
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
-            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, { timeout: 5000 })
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 5000})
                 .then(resp => {
-                    this.cache.set(key,resp.data.zpData.jobCard)
+                    this.cache.set(key, resp.data.zpData.jobCard)
                     return resolve(resp.data.zpData.jobCard);
                 }).catch(error => {
-                    logger.debug("获取详情页异常正在重试:", error)
-                    return this.reqJobDetail(jobTag, retries - 1)
-                })
+                logger.debug("获取详情页异常正在重试:", error)
+                return this.reqJobDetail(jobTag, retries - 1)
+            })
         })
     }
 
@@ -1237,7 +1281,7 @@ class JobListPageHandler {
 
             // 工作内容检查
             let jobContentExclude = this.scriptConfig.getJobContentExclude(true);
-            const jobContentMismatch= Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)
+            const jobContentMismatch = Tools.semanticMatch(jobContentExclude, jobCardJson.postDescription)
             if (jobContentMismatch) {
                 logger.debug("当前job工作内容：" + jobCardJson.postDescription)
                 logger.info(`当前job被过滤：【${jobTitle}】 原因：不满足工作内容(${jobContentMismatch})`)
@@ -1258,6 +1302,14 @@ class JobListPageHandler {
                 ScriptConfig.pushCountIncr()
                 publishResultCount.successCount++
                 logger.info("投递成功：" + BossDOMApi.getJobTitle(jobTag))
+
+                // 改变消息key，通知msg页面处理当前job发送自定义招呼语句
+                TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_MESSAGE, JobMessagePageHandler.buildMsgKey(jobTag))
+
+                // 每页投递次数【默认不会走】
+                if (this.selfDefCount !== -1 && publishResultCount.successCount >= this.selfDefCount) {
+                    return reject(new PublishStopExp("自定义投递限制：" + this.selfDefCount))
+                }
                 return resolve()
             }
 
@@ -1318,7 +1370,7 @@ class JobListPageHandler {
 
                 this.operationPanel.refreshShow("正在投递-->" + jobTitle)
                 // 投递请求
-                axios.post(url, null, { headers: { "Zp_token": Tools.getCookieValue("geek_zp_token") } })
+                axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
                     .then(resp => {
                         if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.content) {
                             // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
@@ -1333,13 +1385,13 @@ class JobListPageHandler {
                         }
                         return resolve(resp.data);
                     }).catch(error => {
-                        logger.debug("投递异常正在重试:" + jobTitle, error)
-                        return resolve(this.sendPublishReq(jobTag, error.message, retries - 1))
-                    }).finally(() => {
-                        // 释放投递锁
-                        logger.debug("释放投递锁：" + jobTitle)
-                        TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
-                    })
+                    logger.debug("投递异常正在重试:" + jobTitle, error)
+                    return resolve(this.sendPublishReq(jobTag, error.message, retries - 1))
+                }).finally(() => {
+                    // 释放投递锁
+                    logger.debug("释放投递锁：" + jobTitle)
+                    TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_LOCK, "")
+                })
             }, 800);
         })
     }
@@ -1406,6 +1458,154 @@ class JobListPageHandler {
         }
 
         return true;
+    }
+}
+
+class JobMessagePageHandler {
+
+    constructor() {
+        this.scriptConfig = new ScriptConfig();
+        this.init()
+    }
+
+    init() {
+        this.registerEvent();
+    }
+
+    registerEvent() {
+        TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_MESSAGE, this.pushAlterMsgHandler.bind(this))
+        logger.debug("注册投递推送消费者成功")
+    }
+
+    /**
+     * 投递后发送自定义打招呼语句【发送自定义消息】
+     */
+    pushAlterMsgHandler(key, oldValue, newValue, isOtherScriptChange) {
+        logger.debug("投递后推送自定义招呼语消费者", {key, oldValue, newValue, isOtherScriptChange})
+        if (!isOtherScriptChange) {
+            return;
+        }
+        if (oldValue === newValue) {
+            return;
+        }
+
+        // 是否打开配置
+        if (!TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false)) {
+            return;
+        }
+
+        let selfGreetMsg = this.getSelfGreet();
+        if (!selfGreetMsg) {
+            logger.debug("自定义招呼语为空结束")
+            return;
+        }
+
+        let count = 0;
+        let process = Promise.resolve()
+        let sendMsgTask = setInterval(() => {
+            process.then(() => {
+                if (++count >= 5) {
+                    logger.debug("发送自定义打招呼语句超时结束")
+                    clearInterval(sendMsgTask);
+                    return;
+                }
+                return new Promise((resolve, reject) => {
+                    let msgTag = JobMessagePageHandler.selectMessage(newValue);
+                    if (!msgTag) {
+                        return reject();
+                    }
+                    // 点击当前待处理的消息框
+                    msgTag.click();
+                    logger.debug("选中消息", msgTag)
+                    return resolve();
+                })
+            }).then(() => {
+                return new Promise((resolve, reject) => {
+                    if (!JobMessagePageHandler.ableInput()) {
+                        return reject();
+                    }
+                    return resolve();
+                })
+            }).then(() => {
+                return new Promise((resolve => {
+                    JobMessagePageHandler.inputMsg(selfGreetMsg)
+                    return resolve();
+                }))
+            }).then(() => {
+                return new Promise(((resolve, reject) => {
+                    if (!JobMessagePageHandler.sendAble()) {
+                        return reject();
+                    }
+                    return resolve();
+                }))
+            }).then(() => {
+                return new Promise((resolve => {
+                    JobMessagePageHandler.sendMsg()
+                    logger.info("推送自定义招呼语成功：" + newValue)
+                    clearInterval(sendMsgTask)
+                    return resolve()
+                }))
+            }).catch(() => {
+                // 不报错
+            })
+        }, 300);
+    }
+
+    getSelfGreet() {
+        return this.scriptConfig.getSelfGreet()
+    }
+
+    static buildMsgKey(jobTag) {
+        let companyName = BossDOMApi.getCompanyName(jobTag);
+        let bossNameAndPosition = BossDOMApi.getBossNameAndPosition(jobTag);
+
+        let bossName = bossNameAndPosition[0];
+        let bossPositionName = bossNameAndPosition[1];
+        return bossName + companyName + bossPositionName;
+    }
+
+    static ableInput() {
+        return document.querySelector(".chat-input") && document.querySelector(".chat-im.chat-editor");
+    }
+
+    static inputMsg(msg) {
+        return document.querySelector(".chat-input").innerText = msg;
+    }
+
+    static sendAble() {
+        let btn = document.querySelector(".btn-v2.btn-sure-v2.btn-send");
+        // 删除按钮标签类名；按钮可点击
+        btn.classList.remove("disabled");
+        return btn;
+    }
+
+    static sendMsg() {
+        // 当前标签绑定的vue组件对象，
+        let chatFrameVueComponent = document.querySelector(".chat-im.chat-editor").__vue__;
+        // 更新开启提交；否则提交拦截
+        chatFrameVueComponent.enableSubmit = true;
+        // 赋值发送websocket的to.uid;手动触发导致uid无值，从friendId获取
+        chatFrameVueComponent.bossInfo$.uid = chatFrameVueComponent.bossInfo$.friendId;
+        let element = document.querySelector(".btn-v2.btn-sure-v2.btn-send");
+        element.click();
+    }
+
+    static getMessageListTag() {
+        return document.querySelector(".user-list").querySelector("div").querySelectorAll("li");
+    }
+
+    static selectMessage(messageKey) {
+        let messageListTag = JobMessagePageHandler.getMessageListTag();
+        for (let i = 0; i < messageListTag.length; i++) {
+            // '09月02日\n刘女士赛德勤人事行政专员\n您好，打扰了，我想和您聊聊这个职位。'
+            // 日期\n【boss名+公司名+职位名】\n 问候语
+            let msgTitle = messageListTag[i].innerText;
+            if (msgTitle.split("\n")[1] === messageKey) {
+                return messageListTag[i].querySelector("div");
+            }
+        }
+
+        logger.warn("本次循环消息key未检索到消息框: " + messageKey)
     }
 }
 
@@ -1515,7 +1715,7 @@ class JobWordCloud {
         let options = {
             tooltip: {
                 show: true,
-                formatter: function(item) {
+                formatter: function (item) {
                     return item[0] + ': ' + item[1]
                 }
             },
@@ -1597,7 +1797,7 @@ GM_registerMenuCommand("切换Ck", async () => {
             window.location.reload();
             // window.alert("手动刷新～");
         } else {
-            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+            window.alert("你当前版本可能不支持Ck操作，错误代码：" + error);
         }
     });
 });
@@ -1617,7 +1817,7 @@ GM_registerMenuCommand("清除当前Ck", () => {
 
             window.location.reload();
         } else {
-            window.alert("你当前版本可能不支持Ck操作，错误代码：", error);
+            window.alert("你当前版本可能不支持Ck操作，错误代码：" + error);
         }
     });
 });
@@ -1626,6 +1826,9 @@ GM_registerMenuCommand("清空所有存储!", async () => {
     if (confirm("将清空脚本全部的设置!!")) {
         const asyncKeys = await GM_listValues();
         for (let index in asyncKeys) {
+            if (!asyncKeys.hasOwnProperty(index)) {
+                continue;
+            }
             console.log(asyncKeys[index]);
             await GM_deleteValue(asyncKeys[index]);
         }
@@ -1636,10 +1839,16 @@ GM_registerMenuCommand("清空所有存储!", async () => {
 (function () {
     const list_url = "web/geek/job";
     const recommend_url = "web/geek/recommend";
+    const message_url = "web/geek/chat";
 
     if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
         window.addEventListener("load", () => {
             new JobListPageHandler()
+        });
+    } else if (document.URL.includes(message_url) && parent?.document?.getElementById('msgIframe')) {
+        window.addEventListener("load", () => {
+            // jobListPage内部的 msgIframe才注册
+            new JobMessagePageHandler();
         });
     }
 })();
