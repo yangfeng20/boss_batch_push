@@ -4,7 +4,7 @@
 
 ### 使用步骤
 
-1. 浏览器下载油猴：https://www.tampermonkey.net/index.php?ext=iikm&version=4.18.1
+1. 浏览器下载油猴：https://www.tampermonkey.net/index.php?ext=iikm
 2. 添加新脚本，复制 【oop-self-req-main.js】 中的代码，粘贴到油猴脚本中
 
 ### 使用说明
@@ -17,7 +17,9 @@
 
 4. 过滤不活跃 Boss：打开后会自动过滤掉最近未活跃的 Boss 发布的工作。以免浪费每天的 100 次机会。
 
-5. 可以在网站管理中打开通知权限,当停止时会自动发送桌面端通知提醒。
+5. 发送自定义招呼语：因为boss不支持将自定义的招呼语设置为默认招呼语。开启表示发送boss默认的招呼语后还会发送自定义招呼语
+
+6. 可以在网站管理中打开通知权限,当停止时会自动发送桌面端通知提醒。
 
 #### 脚本筛选项介绍：
 
@@ -33,6 +35,8 @@
 
 6. 公司规模范围：投递工作的公司人员范围一定在当前区间中，一定是区间，使用-连接范围。例如：【500-20000000】
 
+7. 自定义招呼语：编辑自定义招呼语，当【发送自定义招呼语】打开时，投递后发送boss默认的招呼语后还会发送自定义招呼语；使用&lt;br&gt; \n 换行；例子：【你好\n我...】
+
 ### 效果演示
 
 ![示例](/image/img.png)
@@ -42,6 +46,21 @@
 ![示例3](/image/img3.png)
 
 ### 更新内容
+
+##### 2023-09-21/yangfeng20
+
+- 支持发送自定义招呼语
+
+###### 作者闲话
+- 虽然本次只是一个发送自定义招呼语的功能，也是付出了大把的时间来开发调试。
+- 最初的想法是直接拿到boss的api，自己去发送websocket消息，想了下，如果boss那边有加密或是拦截，那就很麻烦。
+- 就还是开一个iframe标签页面去模拟用户点击发送。但是没想到这里也有坑，直接模拟click会被拦截，我看了下；
+- 大致原因是因为没有触发输入框的获取焦点事件之类的。其他的我也难得，也没有时间思考了，就直接通过通过标签绑定的vue组件修改了【enableSubmit】的值。这个问题也就解决了。
+- 这样，websocket发送出去了，我本以为大功告成了。但是消息页面迟迟没有接收到消息，还是有问题。
+- 然后就对比了下脚本操作和正常点击发送按钮的区别，发现脚本操作是发送websocket时【to.uid】无值，导致发送不成功。
+- 解决将【bossInfo$.friendId】中的数据赋值给了uid。后期大概率将模拟点击换成自己发送websocket。
+- 上述代码见【oop-self-req-main.js sendMsg 1603-1607行】
+- 个人的精力真的有限，也欢迎大家贡献pr。以及点个star。这是更新动力。
 
 ##### 2023-09-10/Ocyss
 
@@ -94,3 +113,13 @@
 <br>
 
 [Greasy Fork](https://greasyfork.org/zh-CN/scripts/468125-boss-batch-push-boss%E7%9B%B4%E8%81%98%E6%89%B9%E9%87%8F%E6%8A%95%E7%AE%80%E5%8E%86)
+
+
+
+### star 数据
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=yangfeng20/boss_batch_push&type=Date&theme=dark" />
+  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=yangfeng20/boss_batch_push&type=Date" />
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=yangfeng20/boss_batch_push&type=Date" />
+</picture>
