@@ -432,13 +432,6 @@ class OperationPanel {
         // 默认开启活跃校验
         this.activeSwitchBtnHandler(this.bossActiveState)
 
-        // 将所有button添加到butDiv容器中
-        // let btnContainerDiv = DOMApi.createTag("div", "", "display: flex; justify-content: space-evenly;");
-        // btnContainerDiv.appendChild(batchPushBtn);
-        // btnContainerDiv.appendChild(generateImgBtn);
-        // btnContainerDiv.appendChild(storeConfigBtn);
-        // btnContainerDiv.appendChild(activeSwitchBtn);
-
         // 2.创建筛选条件输入框并添加到input容器中
         this.cnInInputLab = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
         this.cnExInputLab = DOMApi.createInputTag("公司名排除", this.scriptConfig.getCompanyNameExclude());
@@ -447,6 +440,12 @@ class OperationPanel {
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
         this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet());
+        DOMApi.eventListener(this.selfGreetInputLab.querySelector("input"), "blur", () => {
+            // 失去焦点，编辑的招呼语保存到内存中；用于msgPage每次实时获取到最新的，即便不保存
+            ScriptConfig.setSelfGreetMemory(DOMApi.getInputVal(this.selfGreetInputLab))
+        })
+        // 每次刷新页面；将保存的数据覆盖内存临时数据；否则编辑了自定义招呼语，未保存刷新页面；发的的是之前内存中编辑的临时数据
+        ScriptConfig.setSelfGreetMemory(this.scriptConfig.getSelfGreet())
 
         let inputContainerDiv = DOMApi.createTag("div", "", "margin: 10px 0px;");
         inputContainerDiv.appendChild(this.cnInInputLab)
@@ -879,6 +878,7 @@ class ScriptConfig extends TampermonkeyApi {
     static csrInKey = "companyScaleRange"
     // 自定义招呼语输入框
     static sgInKey = "sendSelfGreet"
+    static SEND_SELF_GREET_MEMORY = "sendSelfGreetMemory"
 
 
     constructor() {
@@ -991,6 +991,19 @@ class ScriptConfig extends TampermonkeyApi {
 
     setSelfGreet(val) {
         this.configObj[ScriptConfig.sgInKey] = val;
+    }
+
+    static setSelfGreetMemory(val) {
+        TampermonkeyApi.GmSetValue(ScriptConfig.SEND_SELF_GREET_MEMORY, val)
+    }
+
+    getSelfGreetMemory() {
+        let value = TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_MEMORY);
+        if (value) {
+            return value;
+        }
+
+        return this.getSelfGreet();
     }
 
     /**
@@ -1552,7 +1565,7 @@ class JobMessagePageHandler {
     }
 
     getSelfGreet() {
-        return this.scriptConfig.getSelfGreet()
+        return this.scriptConfig.getSelfGreetMemory();
     }
 
     static buildMsgKey(jobTag) {
@@ -1569,7 +1582,8 @@ class JobMessagePageHandler {
     }
 
     static inputMsg(msg) {
-        return document.querySelector(".chat-input").innerText = msg;
+        // <br> \n 都可以换行
+        return document.querySelector(".chat-input").innerHTML = msg.replaceAll("\\n", "\n");
     }
 
     static sendAble() {
