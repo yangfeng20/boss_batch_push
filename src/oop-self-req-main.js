@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.1.8
+// @version      1.1.9
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -24,7 +24,7 @@
 
 "use strict";
 
-let logger = Logger.log("debug")
+let logger = Logger.log("info")
 
 class BossBatchExp extends Error {
     constructor(msg) {
@@ -1262,6 +1262,9 @@ class JobListPageHandler {
             if (retries === 0) {
                 return reject(new FetchJobDetailFailExp());
             }
+            // todo 如果在投递当前页中，点击停止投递，那么当前页重新投递的话，会将已经投递的再重新投递一遍
+            //  原因是没有重新获取数据；沟通状态还是立即沟通，实际已经投递过一遍，已经为继续沟通
+            //  暂时不影响逻辑，重复投递，boss自己会过滤，不会重复发送消息；发送自定义招呼语也没问题；油猴会过滤【oldVal===newVal】的数据，也就不会重复发送自定义招呼语
             const key = BossDOMApi.getUniqueKey(jobTag)
             if (this.cache.has(key)) {
                 return resolve(this.cache.get(key))
@@ -1619,7 +1622,7 @@ class JobMessagePageHandler {
             }
         }
 
-        logger.warn("本次循环消息key未检索到消息框: " + messageKey)
+        logger.debug("本次循环消息key未检索到消息框: " + messageKey)
     }
 }
 
