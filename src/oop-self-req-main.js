@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.1.9
+// @version      1.1.10
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -25,7 +25,7 @@
 "use strict";
 
 let logger = Logger.log("info")
-
+let pageType
 class BossBatchExp extends Error {
     constructor(msg) {
         super(msg);
@@ -261,11 +261,14 @@ class DOMApi {
         return htmlTag;
     }
 
-    static createInputTag(descName, valueStr) {
+    static createInputTag(descName, valueStr, area = false) {
         const inputNameLabel = document.createElement("label");
         inputNameLabel.textContent = descName;
-        const inputTag = document.createElement("input");
+        let inputTag = document.createElement("input");
         inputTag.type = "text";
+        if (area) {
+            inputTag = document.createElement("textarea");
+        }
         inputNameLabel.appendChild(inputTag);
         if (valueStr) {
             inputTag.value = valueStr;
@@ -273,12 +276,12 @@ class DOMApi {
 
         // 样式
         inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px; font-weight: bold; width: 200px;";
-        inputTag.style.cssText = "margin-left: 2px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
+        inputTag.style.cssText = "margin-left: 2px; height: 33px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;resize: none;";
         return inputNameLabel;
     }
 
     static getInputVal(inputLab) {
-        return inputLab.querySelector("input").value
+        return inputLab.querySelector("input,textarea")?.value
     }
 
     static eventListener(tag, eventType, func) {
@@ -363,7 +366,7 @@ class OperationPanel {
             "Job名包含：投递工作的名称一定包含在当前集合中，模糊匹配，多个使用逗号分割。例如：【软件,Java,后端,服务端,开发,后台】",
             "薪资范围：投递工作的薪资范围一定在当前区间中，一定是区间，使用-连接范围。例如：【12-20】",
             "公司规模范围：投递工作的公司人员范围一定在当前区间中，一定是区间，使用-连接范围。例如：【500-20000000】",
-            "自定义招呼语：编辑自定义招呼语，当【发送自定义招呼语】打开时，投递后发送boss默认的招呼语后还会发送自定义招呼语；使用&lt;br&gt; \\n 换行；例子：【你好\\n我...】",
+            "自定义招呼语：编辑自定义招呼语，当【发送自定义招呼语】打开时，投递后发送boss默认的招呼语后还会发送自定义招呼语；使用&lt;br&gt; \\n 换行；例子：【你好\\n我...】；内置变量 $JOBNAME$ $COMPANYNAME$ $BOSSNAME$",
             "👻",
         ];
 
@@ -441,15 +444,15 @@ class OperationPanel {
         this.jcExInputLab = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
-        this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet());
-        DOMApi.eventListener(this.selfGreetInputLab.querySelector("input"), "blur", () => {
+        this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet(), true);
+        DOMApi.eventListener(this.selfGreetInputLab.querySelector("textarea"), "blur", () => {
             // 失去焦点，编辑的招呼语保存到内存中；用于msgPage每次实时获取到最新的，即便不保存
             ScriptConfig.setSelfGreetMemory(DOMApi.getInputVal(this.selfGreetInputLab))
         })
         // 每次刷新页面；将保存的数据覆盖内存临时数据；否则编辑了自定义招呼语，未保存刷新页面；发的的是之前内存中编辑的临时数据
         ScriptConfig.setSelfGreetMemory(this.scriptConfig.getSelfGreet())
 
-        let inputContainerDiv = DOMApi.createTag("div", "", "margin: 10px 0px;");
+        let inputContainerDiv = DOMApi.createTag("div", "", "margin: 10px 0px;display: flex;flex-wrap: wrap;");
         inputContainerDiv.appendChild(this.cnInInputLab)
         inputContainerDiv.appendChild(this.cnExInputLab)
         inputContainerDiv.appendChild(this.jnInInputLab)
@@ -479,39 +482,55 @@ class OperationPanel {
         // 找到页面锚点并将操作面板添加入页面
         let timingCutPageTask = setInterval(() => {
             logger.debug("等待页面加载，添加操作面板")
-            // 页面锚点
-            const jobSearchWrapper = document.querySelector(".job-search-wrapper")
-            if (!jobSearchWrapper) {
-                return;
-            }
-            const jobConditionWrapper = jobSearchWrapper.querySelector(".search-condition-wrapper")
-            if (!jobConditionWrapper) {
-                return
-            }
             let topTitle = DOMApi.createTag("h2");
             this.topTitle = topTitle;
             topTitle.textContent = `Boos直聘投递助手（${this.scriptConfig.getVal(ScriptConfig.PUSH_COUNT, 0)}次） 记得 star⭐`;
-            jobConditionWrapper.insertBefore(topTitle, jobConditionWrapper.firstElementChild)
-            // 按钮/搜索换位
-            const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
-            jobSearchBox.style.margin = "20px 0"
-            jobSearchBox.style.width = "100%"
-            const city = jobConditionWrapper.querySelector(".city-area-select")
-            city.querySelector(".city-area-current").style.width = "85px"
-            const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
-            const cityAreaDropdown = jobSearchWrapper.querySelector(".city-area-dropdown")
-            cityAreaDropdown.insertBefore(jobSearchBox, cityAreaDropdown.firstElementChild)
-            const filter = DOMApi.createTag("div", "", "overflow：hidden ")
-            condition.forEach(item => {
-                filter.appendChild(item)
-            })
-            filter.appendChild(DOMApi.createTag("div", "", "clear:both"))
-            cityAreaDropdown.appendChild(filter)
+            // 按钮组
             const bttt = [batchPushBtn, generateImgBtn, storeConfigBtn, this.activeSwitchBtn, this.sendSelfGreetSwitchBtn]
-            bttt.forEach(item => {
-                jobConditionWrapper.appendChild(item);
-            })
-            cityAreaDropdown.appendChild(operationPanel);
+            switch (pageType) {
+                case "geekJob":
+                    const jobSearchWrapper = document.querySelector(".job-search-wrapper")
+                    if (!jobSearchWrapper) {
+                        return;
+                    }
+                    const jobConditionWrapper = jobSearchWrapper.querySelector(".search-condition-wrapper")
+                    if (!jobConditionWrapper) {
+                        return
+                    }
+                    jobConditionWrapper.insertBefore(topTitle, jobConditionWrapper.firstElementChild)
+                    // 按钮/搜索换位
+                    const jobSearchBox = jobSearchWrapper.querySelector(".job-search-box")
+                    jobSearchBox.style.margin = "20px 0"
+                    jobSearchBox.style.width = "100%"
+                    const city = jobConditionWrapper.querySelector(".city-area-select")
+                    city.querySelector(".city-area-current").style.width = "85px"
+                    const condition = jobSearchWrapper.querySelectorAll(".condition-industry-select,.condition-position-select,.condition-filter-select,.clear-search-btn")
+                    const cityAreaDropdown = jobSearchWrapper.querySelector(".city-area-dropdown")
+                    cityAreaDropdown.insertBefore(jobSearchBox, cityAreaDropdown.firstElementChild)
+                    const filter = DOMApi.createTag("div", "", "overflow：hidden ")
+                    condition.forEach(item => {
+                        filter.appendChild(item)
+                    })
+                    filter.appendChild(DOMApi.createTag("div", "", "clear:both"))
+                    cityAreaDropdown.appendChild(filter)
+
+                    bttt.forEach(item => {
+                        jobConditionWrapper.appendChild(item);
+                    })
+                    cityAreaDropdown.appendChild(operationPanel);
+                    break
+                case "geekRecommend":
+                    const jobSearchCondition = document.querySelector(".system-search-condition")
+                    if (!jobSearchCondition) {
+                        return;
+                    }
+                    jobSearchCondition.insertBefore(topTitle, jobSearchCondition.firstElementChild)
+                    bttt.forEach(item => {
+                        jobSearchCondition.appendChild(item);
+                    })
+                    jobSearchCondition.appendChild(operationPanel)
+                    break
+            }
             clearInterval(timingCutPageTask);
             logger.debug("初始化【操作面板】成功")
             // 页面美化
@@ -537,7 +556,7 @@ class OperationPanel {
         // DOMApi.setElement(".job-search-wrapper",{width:"90%"})
         // DOMApi.setElement(".page-job-content",{width:"90%"})
         // DOMApi.setElement(".job-list-wrapper",{width:"100%"})
-        GM_addStyle(`
+        let styles = `
         .job-search-wrapper,.page-job-content{width: 90% !important}
         .job-list-wrapper,.job-card-wrapper,.job-search-wrapper.fix-top{width: 100% !important}
         .job-card-wrapper .job-card-body{display: flex;justify-content: space-between;}
@@ -553,7 +572,14 @@ class OperationPanel {
         .job-search-box .job-search-form .search-input-box{width: 82%;}
         .job-search-box .job-search-form .search-btn{width: 8%;}
         .job-search-wrapper.fix-top .job-search-box, .job-search-wrapper.fix-top .search-condition-wrapper{width: 90%;min-width:990px;}
-        `)
+        `
+        if (pageType === "geekRecommend") {
+            styles += `
+            #main.inner{width:auto;margin: 0 30px;}
+            .system-search-condition{width:auto !important;}
+            `
+        }
+        GM_addStyle(styles)
         logger.debug("初始化【页面美化】成功")
     }
 
@@ -573,8 +599,8 @@ class OperationPanel {
 
     buildDocDiv() {
         const docDiv = DOMApi.createTag("div", "", "margin: 10px 0px; width: 100%;")
-        let txtDiv = DOMApi.createTag("div", "", "display: block;");
-        const title = DOMApi.createTag("h3", "操作说明(点击关闭)", "margin: 10px 0px;cursor: pointer")
+        let txtDiv = DOMApi.createTag("div", "", "display: none;");
+        const title = DOMApi.createTag("h3", "操作说明(点击展开)", "margin: 10px 0px;cursor: pointer")
 
         docDiv.appendChild(title)
         docDiv.appendChild(txtDiv)
@@ -611,7 +637,8 @@ class OperationPanel {
     }
 
     buildMsgPageIframe() {
-        let msgPageIframe = DOMApi.createTag("iframe", "", "height:1px;width: 1px;");
+        // 使用css允许拖拽改变大小，方便调试
+        let msgPageIframe = DOMApi.createTag("iframe", "", "height:1px;width: 1px;resize: both;overflow: auto;");
         msgPageIframe.src = 'https://www.zhipin.com/web/geek/chat';
         msgPageIframe.id = 'msgIframe';
         return msgPageIframe
@@ -836,7 +863,7 @@ class OperationPanel {
 
     publishCountChangeEventHandler(key, oldValue, newValue, isOtherScriptChange) {
         this.topTitle.textContent = `Boos直聘投递助手（${newValue}次） 记得 star⭐`;
-        logger.debug("投递次数变更事件", {key, oldValue, newValue, isOtherScriptChange})
+        logger.debug("投递次数变更事件", { key, oldValue, newValue, isOtherScriptChange })
     }
 
     /*-------------------------------------------------other method--------------------------------------------------*/
@@ -1193,6 +1220,7 @@ class JobListPageHandler {
         }
         let jobList = BossDOMApi.getJobList();
         logger.debug("jobList", jobList)
+
         let process = Array.from(jobList).reduce((promiseChain, jobTag) => {
             let jobTitle = BossDOMApi.getJobTitle(jobTag);
             return promiseChain
@@ -1254,11 +1282,9 @@ class JobListPageHandler {
     cacheClear() {
         this.cache.clear()
     }
-
     cacheSize() {
         return this.cache.size
     }
-
     reqJobDetail(jobTag, retries = 3) {
         return new Promise((resolve, reject) => {
             if (retries === 0) {
@@ -1272,7 +1298,7 @@ class JobListPageHandler {
                 return resolve(this.cache.get(key))
             }
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
-            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 5000})
+            axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, { timeout: 5000 })
                 .then(resp => {
                     this.cache.set(key, resp.data.zpData.jobCard)
                     return resolve(resp.data.zpData.jobCard);
@@ -1305,7 +1331,6 @@ class JobListPageHandler {
                 logger.info(`当前job被过滤：【${jobTitle}】 原因：不满足工作内容(${jobContentMismatch})`)
                 return reject(new JobNotMatchExp())
             }
-
             setTimeout(() => {
                 // 获取不同的延时，避免后面投递时一起导致频繁
                 return resolve();
@@ -1388,7 +1413,7 @@ class JobListPageHandler {
 
                 this.operationPanel.refreshShow("正在投递-->" + jobTitle)
                 // 投递请求
-                axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
+                axios.post(url, null, { headers: { "Zp_token": Tools.getCookieValue("geek_zp_token") } })
                     .then(resp => {
                         if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.content) {
                             // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
@@ -1499,11 +1524,11 @@ class JobMessagePageHandler {
      * 投递后发送自定义打招呼语句【发送自定义消息】
      */
     pushAlterMsgHandler(key, oldValue, newValue, isOtherScriptChange) {
-        logger.debug("投递后推送自定义招呼语消费者", {key, oldValue, newValue, isOtherScriptChange})
+        logger.debug("投递后推送自定义招呼语消费者", { key, oldValue, newValue, isOtherScriptChange })
         if (!isOtherScriptChange) {
             return;
         }
-        if (oldValue === newValue) {
+        if (oldValue.key === newValue.key) {
             return;
         }
 
@@ -1517,7 +1542,10 @@ class JobMessagePageHandler {
             logger.debug("自定义招呼语为空结束")
             return;
         }
-
+        selfGreetMsg = selfGreetMsg.
+        replaceAll("$JOBNAME$", newValue.jobName).
+        replaceAll("$COMPANYNAME$", newValue.companyName).
+        replaceAll("$BOSSNAME$", newValue.bossName)
         let count = 0;
         let process = Promise.resolve()
         let sendMsgTask = setInterval(() => {
@@ -1528,7 +1556,7 @@ class JobMessagePageHandler {
                     return;
                 }
                 return new Promise((resolve, reject) => {
-                    let msgTag = JobMessagePageHandler.selectMessage(newValue);
+                    let msgTag = JobMessagePageHandler.selectMessage(newValue.key);
                     if (!msgTag) {
                         return reject();
                     }
@@ -1547,7 +1575,7 @@ class JobMessagePageHandler {
             }).then(() => {
                 return new Promise((resolve => {
                     JobMessagePageHandler.inputMsg(selfGreetMsg)
-                    return resolve();
+                    return resolve()
                 }))
             }).then(() => {
                 return new Promise(((resolve, reject) => {
@@ -1579,11 +1607,16 @@ class JobMessagePageHandler {
 
         let bossName = bossNameAndPosition[0];
         let bossPositionName = bossNameAndPosition[1];
-        return bossName + companyName + bossPositionName;
+        return {
+            key: bossName + companyName + bossPositionName,
+            jobName: BossDOMApi.getJobName(jobTag),
+            companyName,
+            bossName
+        };
     }
 
     static ableInput() {
-        return document.querySelector(".chat-input") && document.querySelector(".chat-im.chat-editor");
+        return document.querySelector(".chat-input") && document.querySelector(".chat-im.chat-editor")
     }
 
     static inputMsg(msg) {
@@ -1856,18 +1889,26 @@ GM_registerMenuCommand("清空所有存储!", async () => {
 });
 
 (function () {
-    const list_url = "web/geek/job";
-    const recommend_url = "web/geek/recommend";
-    const message_url = "web/geek/chat";
+    const URL_MAP = {
+        "web/geek/job": "geekJob",
+        "web/geek/recommend": "geekRecommend",
+        "web/geek/chat": "geekMessage"
+    };
 
-    if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
-        window.addEventListener("load", () => {
+    pageType = function () {
+        for (const url in URL_MAP) {
+            if (document.URL.includes(url)) {
+                return URL_MAP[url];
+            }
+        }
+        return null;
+    }();
+    window.addEventListener("load", () => {
+        if (pageType == "geekJob" || pageType == "geekRecommend") {
             new JobListPageHandler()
-        });
-    } else if (document.URL.includes(message_url) && parent?.document?.getElementById('msgIframe')) {
-        window.addEventListener("load", () => {
+        } else if (pageType == "geekMessage" && parent?.document?.getElementById('msgIframe')) {
             // jobListPage内部的 msgIframe才注册
             new JobMessagePageHandler();
-        });
-    }
+        }
+    });
 })();
