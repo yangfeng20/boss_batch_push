@@ -471,11 +471,8 @@ class OperationPanel {
         // 链接关于
         // 操作按钮
         // 筛选输入框
-        // iframe【详情页投递内部页】
         operationPanel.appendChild(this.buildDocDiv())
         operationPanel.appendChild(inputContainerDiv)
-        // 发送自定义招呼语的iframe
-        operationPanel.appendChild(this.buildMsgPageIframe())
         operationPanel.appendChild(this.showTable)
         // 词云图模态框 加到根节点
         document.body.appendChild(this.buildWordCloudModel())
@@ -613,14 +610,6 @@ class OperationPanel {
         })
         return docDiv;
     }
-
-    buildMsgPageIframe() {
-        let msgPageIframe = DOMApi.createTag("iframe", "", "height:1px;width: 1px;");
-        msgPageIframe.src = 'https://www.zhipin.com/web/geek/chat';
-        msgPageIframe.id = 'msgIframe';
-        return msgPageIframe
-    }
-
 
     buildShowTable() {
         return DOMApi.createTag('p', '', 'font-size: 20px;color: rgb(64, 158, 255);margin-left: 50px;');
@@ -1329,9 +1318,6 @@ class JobListPageHandler {
                 publishResultCount.successCount++
                 logger.info("投递成功：" + BossDOMApi.getJobTitle(jobTag))
 
-                // 改变消息key，通知msg页面处理当前job发送自定义招呼语句
-                // TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_MESSAGE, JobMessagePageHandler.buildMsgKey(jobTag))
-
                 // 通过websocket发送自定义消息
                 if (TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false) &&
                     this.scriptConfig.getSelfGreetMemory()) {
@@ -1535,183 +1521,6 @@ class JobListPageHandler {
         }
 
         return true;
-    }
-}
-
-class JobMessagePageHandler {
-
-    constructor() {
-        this.scriptConfig = new ScriptConfig();
-        this.init()
-    }
-
-    init() {
-        this.registerEvent();
-    }
-
-    registerEvent() {
-        TampermonkeyApi.GmAddValueChangeListener(ScriptConfig.PUSH_MESSAGE, this.pushAlterMsgHandler.bind(this))
-        logger.debug("注册投递推送消费者成功")
-    }
-
-    /**
-     * 投递后发送自定义打招呼语句【发送自定义消息】
-     */
-    pushAlterMsgHandler(key, oldValue, newValue, isOtherScriptChange) {
-        logger.debug("投递后推送自定义招呼语消费者", {key, oldValue, newValue, isOtherScriptChange})
-        if (!isOtherScriptChange) {
-            return;
-        }
-        if (oldValue === newValue) {
-            return;
-        }
-
-        // 是否打开配置
-        if (!TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false)) {
-            return;
-        }
-
-        let selfGreetMsg = this.getSelfGreet();
-        if (!selfGreetMsg) {
-            logger.debug("自定义招呼语为空结束")
-            return;
-        }
-
-        let count = 0;
-        let process = Promise.resolve()
-        let sendMsgTask = setInterval(() => {
-            process.then(() => {
-                if (++count >= 5) {
-                    logger.debug("发送自定义打招呼语句超时结束")
-                    clearInterval(sendMsgTask);
-                    return;
-                }
-                return new Promise((resolve, reject) => {
-                    let msgTag = JobMessagePageHandler.selectMessage(newValue);
-                    if (!msgTag) {
-                        return reject();
-                    }
-                    // 点击当前待处理的消息框
-                    msgTag.click();
-                    logger.debug("选中消息", msgTag)
-                    return resolve();
-                })
-            }).then(() => {
-                return new Promise((resolve, reject) => {
-                    if (!JobMessagePageHandler.ableInput()) {
-                        return reject();
-                    }
-                    return resolve();
-                })
-            }).then(() => {
-                return new Promise((resolve => {
-                    JobMessagePageHandler.inputMsg(selfGreetMsg)
-                    return resolve();
-                }))
-            }).then(() => {
-                return new Promise(((resolve, reject) => {
-                    if (!JobMessagePageHandler.sendAble()) {
-                        return reject();
-                    }
-                    return resolve();
-                }))
-            }).then(() => {
-                return new Promise((resolve => {
-                    JobMessagePageHandler.sendMsg()
-                    logger.info("推送自定义招呼语成功：" + newValue)
-                    clearInterval(sendMsgTask)
-                    return resolve()
-                }))
-            }).catch(() => {
-                // 不报错
-            })
-        }, 300);
-    }
-
-    getSelfGreet() {
-        return this.scriptConfig.getSelfGreetMemory();
-    }
-
-    static buildMsgKey(jobTag) {
-        let companyName = BossDOMApi.getCompanyName(jobTag);
-        let bossNameAndPosition = BossDOMApi.getBossNameAndPosition(jobTag);
-
-        let bossName = bossNameAndPosition[0];
-        let bossPositionName = bossNameAndPosition[1];
-        return bossName + companyName + bossPositionName;
-    }
-
-    static ableInput() {
-        return document.querySelector(".chat-input") && document.querySelector(".chat-im.chat-editor");
-    }
-
-    static inputMsg(msg) {
-        // <br> \n 都可以换行
-        return document.querySelector(".chat-input").innerHTML = msg.replaceAll("\\n", "\n");
-    }
-
-    static sendAble() {
-        let btn = document.querySelector(".btn-v2.btn-sure-v2.btn-send");
-        // 删除按钮标签类名；按钮可点击
-        btn.classList.remove("disabled");
-        return btn;
-    }
-
-    static sendMsg() {
-        // 当前标签绑定的vue组件对象，
-        let chatFrameVueComponent = document.querySelector(".chat-im.chat-editor").__vue__;
-        // 更新开启提交；否则提交拦截
-        chatFrameVueComponent.enableSubmit = true;
-        // 赋值发送websocket的to.uid;手动触发导致uid无值，从friendId获取
-        chatFrameVueComponent.bossInfo$.uid = chatFrameVueComponent.bossInfo$.friendId;
-        let element = document.querySelector(".btn-v2.btn-sure-v2.btn-send");
-        element.click();
-
-        // 发送简历[需要boss也发送过消息]
-        // this.sendResume(chatFrameVueComponent.bossInfo$.securityId, "52c2b3e302adff141XB92dm-GFFU")
-    }
-
-    /**
-     * 发送简历需要双方互发消息之后才能发送成功 todo
-     * 想要实现的效果是直接发送给对方，对方同意之后可以直接接收【手机有这个功能，电脑没有】
-     * @param securityId job职位的加密id
-     * @param encryptResumeId 简历id
-     */
-    static sendResume(securityId, encryptResumeId) {
-        if (!securityId) {
-            let chatFrameVueComponent = document.querySelector(".chat-im.chat-editor").__vue__;
-            securityId = chatFrameVueComponent.bossInfo$.securityId;
-        }
-
-        let resumeUrl = "https://www.zhipin.com/wapi/zpchat/exchange/request"
-        let url = Tools.queryString(resumeUrl, {
-            securityId,
-            encryptResumeId,
-            type: 3,
-        })
-        axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
-            .then(resp => {
-                // 返回的数据中必须要有type才表示成功，只有success是没有成功的
-                logger.info("发送简历结果：", resp.data)
-            })
-    }
-
-    static getMessageListTag() {
-        return document.querySelector(".user-list").querySelector("div").querySelectorAll("li");
-    }
-
-    static selectMessage(messageKey) {
-        let messageListTag = JobMessagePageHandler.getMessageListTag();
-        for (let i = 0; i < messageListTag.length; i++) {
-            // '09月02日\n刘女士赛德勤人事行政专员\n您好，打扰了，我想和您聊聊这个职位。'
-            // 日期\n【boss名+公司名+职位名】\n 问候语
-            let msgTitle = messageListTag[i].innerText;
-            if (msgTitle.split("\n")[1] === messageKey) {
-                return messageListTag[i].querySelector("div");
-            }
-        }
-
-        logger.debug("本次循环消息key未检索到消息框: " + messageKey)
     }
 }
 
@@ -2018,16 +1827,10 @@ GM_registerMenuCommand("清空所有存储!", async () => {
 (function () {
     const list_url = "web/geek/job";
     const recommend_url = "web/geek/recommend";
-    const message_url = "web/geek/chat";
 
     if (document.URL.includes(list_url) || document.URL.includes(recommend_url)) {
         window.addEventListener("load", () => {
             new JobListPageHandler()
-        });
-    } else if (document.URL.includes(message_url) && parent?.document?.getElementById('msgIframe')) {
-        window.addEventListener("load", () => {
-            // jobListPage内部的 msgIframe才注册
-            new JobMessagePageHandler();
         });
     }
 })();
