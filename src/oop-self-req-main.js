@@ -25,7 +25,7 @@
 
 "use strict";
 
-let logger = Logger.log("debug")
+let logger = Logger.log("info")
 
 class BossBatchExp extends Error {
     constructor(msg) {
@@ -1121,9 +1121,9 @@ class JobListPageHandler {
         this.operationPanel.init()
         this.publishState = false
         this.nextPage = false
-        this.mock = true
+        this.mock = false
         this.cache = new Map()
-        this.selfDefCount = 10
+        this.selfDefCount = -1
     }
 
     /**
