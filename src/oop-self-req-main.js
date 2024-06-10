@@ -25,7 +25,7 @@
 
 "use strict";
 
-let logger = Logger.log("info")
+let logger = Logger.log("debug")
 
 class BossBatchExp extends Error {
     constructor(msg) {
@@ -182,7 +182,8 @@ class Tools {
                 let inputEnd = parseInt(inputMatch[2] || inputMatch[1]);
                 return (
                     (inputStart >= start && inputStart <= end) ||
-                    (inputEnd >= start && inputEnd <= end)
+                    (inputEnd >= start && inputEnd <= end) ||
+                    (inputStart <= start && inputEnd >= end)
                 );
             }
         }
@@ -1120,9 +1121,9 @@ class JobListPageHandler {
         this.operationPanel.init()
         this.publishState = false
         this.nextPage = false
-        this.mock = false
+        this.mock = true
         this.cache = new Map()
-        this.selfDefCount = -1
+        this.selfDefCount = 10
     }
 
     /**
