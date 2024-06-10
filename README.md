@@ -1,11 +1,36 @@
 ## Boss Batch Push
 
+<hr>
+
+## 作者开源项目推荐
+ ### [Github Smart-Config](https://github.com/yangfeng20/smart-config)
+ ### [Gitee Smart-Config](https://gitee.com/yangfeng20/smart-config)
+
+智能配置：单体应用下的动态配置。 主要用来解决在单体应用没有配置中心时，想要动态变更配置的需求。可以理解为单机版的apollo
+，无需单独部署，内嵌使用。
+
+- 优势
+- 权限校验
+- 动态变更配置
+- webUi修改配置
+- 支持非SpringBoot应用
+- 无缝衔接SpringBoot应用
+- 支持结构化数据（json，集合，对象）
+- 轻量级无冗余第三方库
+- 内嵌轻量级jetty服务器
+- webUi支持中英文切换
+- 支持springboot多配置文件
+- 支持spring.config.location以及spring.profiles.active
+- 支持启动参数修改webUi端口以及配置描述推断
+<hr>
+
 ## boss 直聘批量投简历
 
 ### 使用步骤
 
 1. 浏览器下载油猴：https://www.tampermonkey.net/index.php?ext=iikm
-2. 添加新脚本，复制 【oop-self-req-main.js】 中的代码，粘贴到油猴脚本中
+2. 添加新脚本，复制 【oop-self-req-main.js】 中的代码，油猴点击添加新脚本，粘贴到油猴脚本中，保存。
+   1. 或者直接在Greasy Fork下载脚本【[Greasy Fork Boss直聘批量投简历](https://greasyfork.org/zh-CN/scripts/468125)】
 
 ### 使用说明
 
@@ -46,6 +71,11 @@
 ![示例3](/image/img3.png)
 
 ### 更新内容
+
+##### 2024-06-10/yangfeng20
+
+- 修复自定义招呼语重复发送问题（websocket）
+- 修复薪资范围匹配问题
 
 ##### 2023-09-21/yangfeng20
 
