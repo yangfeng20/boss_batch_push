@@ -12,6 +12,7 @@
 // @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @require      https://cdn.jsdelivr.net/npm/js2wordcloud@1.1.12/dist/js2wordcloud.min.js
+// @require      https://unpkg.com/protobufjs@7.2.6/dist/protobuf.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -48,8 +49,11 @@ class PublishLimitExp extends BossBatchExp {
 }
 
 class FetchJobDetailFailExp extends BossBatchExp {
-    constructor(msg) {
+    jobTitle = "";
+
+    constructor(jobTitle, msg) {
         super(msg);
+        this.jobTitle = jobTitle;
         this.name = "FetchJobDetailFailExp";
     }
 }
@@ -1041,6 +1045,10 @@ class BossDOMApi {
         return document.querySelectorAll(".job-card-wrapper");
     }
 
+    static getJobDetail(jobTag) {
+        return jobTag.__vue__.data
+    }
+
     static getJobTitle(jobTag) {
         let innerText = jobTag.querySelector(".job-title").innerText;
         return innerText.replace("\n", " ");
@@ -1322,7 +1330,28 @@ class JobListPageHandler {
                 logger.info("投递成功：" + BossDOMApi.getJobTitle(jobTag))
 
                 // 改变消息key，通知msg页面处理当前job发送自定义招呼语句
-                TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_MESSAGE, JobMessagePageHandler.buildMsgKey(jobTag))
+                // TampermonkeyApi.GmSetValue(ScriptConfig.PUSH_MESSAGE, JobMessagePageHandler.buildMsgKey(jobTag))
+
+                // 通过websocket发送自定义消息
+                if (TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false) &&
+                    this.scriptConfig.getSelfGreetMemory()) {
+                    let selfGreet = this.scriptConfig.getSelfGreet();
+                    let jobDetail = BossDOMApi.getJobDetail(jobTag);
+                    this.requestBossData(jobDetail).then(bossData => {
+                        new Message({
+                            form_uid: unsafeWindow._PAGE.uid.toString(),
+                            to_uid: bossData.data.bossId.toString(),
+                            to_name: jobDetail.encryptBossId,
+                            content: selfGreet.replace("\\n", "\n").replace(/<br[^>]*>/g, '\n')
+                        }).send()
+                    }).catch(e => {
+                        if (e instanceof FetchJobDetailFailExp) {
+                            logger.warn("发送自定义招呼失败:[ " + e.jobTitle + " ]: " + e.message)
+                        } else {
+                            logger.error("发送自定义招呼失败 ", e)
+                        }
+                    })
+                }
 
                 // 每页投递次数【默认不会走】
                 if (this.selfDefCount !== -1 && publishResultCount.successCount >= this.selfDefCount) {
@@ -1339,7 +1368,37 @@ class JobListPageHandler {
         })
     }
 
-    sendPublishReq(jobTag, errorMsg, retries = 3) {
+    async requestBossData(jobDetail, errorMsg = "", retries = 3) {
+        let jobTitle = jobDetail.jobName + "-" + jobDetail.cityName + jobDetail.areaDistrict + jobDetail.businessDistrict;
+
+        if (retries === 0) {
+            throw new FetchJobDetailFailExp(jobTitle, errorMsg || "获取boss数据重试多次失败");
+        }
+        const url = "https://www.zhipin.com/wapi/zpchat/geek/getBossData";
+        const token = unsafeWindow?._PAGE?.zp_token;
+        if (!token) {
+            throw new FetchJobDetailFailExp(jobTitle, "未获取到zp-token");
+        }
+
+        const data = new FormData();
+        data.append("bossId", jobDetail.encryptBossId);
+        data.append("securityId", jobDetail.securityId);
+        data.append("bossSrc", "0");
+
+        let resp;
+        try {
+            resp = await axios({url, data: data, method: "POST", headers: {Zp_token: token}});
+        } catch (e) {
+            return this.requestBossData(jobDetail, e.message, retries - 1);
+        }
+
+        if (resp.data.code !== 0) {
+            throw new FetchJobDetailFailExp(jobTitle, resp.data.message);
+        }
+        return resp.data.zpData
+    }
+
+    sendPublishReq(jobTag, errorMsg = "", retries = 3) {
         let jobTitle = BossDOMApi.getJobTitle(jobTag);
         if (retries === 3) {
             logger.debug("正在投递：" + jobTitle)
@@ -1607,6 +1666,34 @@ class JobMessagePageHandler {
         chatFrameVueComponent.bossInfo$.uid = chatFrameVueComponent.bossInfo$.friendId;
         let element = document.querySelector(".btn-v2.btn-sure-v2.btn-send");
         element.click();
+
+        // 发送简历[需要boss也发送过消息]
+        // this.sendResume(chatFrameVueComponent.bossInfo$.securityId, "52c2b3e302adff141XB92dm-GFFU")
+    }
+
+    /**
+     * 发送简历需要双方互发消息之后才能发送成功 todo
+     * 想要实现的效果是直接发送给对方，对方同意之后可以直接接收【手机有这个功能，电脑没有】
+     * @param securityId job职位的加密id
+     * @param encryptResumeId 简历id
+     */
+    static sendResume(securityId, encryptResumeId) {
+        if (!securityId) {
+            let chatFrameVueComponent = document.querySelector(".chat-im.chat-editor").__vue__;
+            securityId = chatFrameVueComponent.bossInfo$.securityId;
+        }
+
+        let resumeUrl = "https://www.zhipin.com/wapi/zpchat/exchange/request"
+        let url = Tools.queryString(resumeUrl, {
+            securityId,
+            encryptResumeId,
+            type: 3,
+        })
+        axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
+            .then(resp => {
+                // 返回的数据中必须要有type才表示成功，只有success是没有成功的
+                logger.info("发送简历结果：", resp.data)
+            })
     }
 
     static getMessageListTag() {
@@ -1786,6 +1873,79 @@ class JobWordCloud {
         }
     }
 
+}
+
+class Message {
+
+    static AwesomeMessage;
+    static {
+        let Type = protobuf.Type, Field = protobuf.Field;
+        const root = new protobuf.Root()
+            .define("cn.techwolf.boss.chat")
+            .add(new Type("TechwolfUser")
+                .add(new Field("uid", 1, "int64"))
+                .add(new Field("name", 2, "string", "optional"))
+                .add(new Field("source", 7, "int32", "optional")))
+            .add(new Type("TechwolfMessageBody")
+                .add(new Field("type", 1, "int32"))
+                .add(new Field("templateId", 2, "int32", "optional"))
+                .add(new Field("headTitle", 11, "string"))
+                .add(new Field("text", 3, "string")))
+            .add(new Type("TechwolfMessage")
+                .add(new Field("from", 1, "TechwolfUser"))
+                .add(new Field("to", 2, "TechwolfUser"))
+                .add(new Field("type", 3, "int32"))
+                .add(new Field("mid", 4, "int64", "optional"))
+                .add(new Field("time", 5, "int64", "optional"))
+                .add(new Field("body", 6, "TechwolfMessageBody"))
+                .add(new Field("cmid", 11, "int64", "optional")))
+            .add(new Type("TechwolfChatProtocol")
+                .add(new Field("type", 1, "int32"))
+                .add(new Field("messages", 3, "TechwolfMessage", "repeated")));
+        Message.AwesomeMessage = root.lookupType("TechwolfChatProtocol");
+    }
+
+    constructor({form_uid, to_uid, to_name, content,}) {
+        const r = new Date().getTime();
+        const d = r + 68256432452609;
+        const data = {
+            messages: [
+                {
+                    from: {
+                        uid: form_uid,
+                        source: 0,
+                    },
+                    to: {
+                        uid: to_uid,
+                        name: to_name,
+                        source: 0,
+                    },
+                    type: 1,
+                    mid: d.toString(),
+                    time: r.toString(),
+                    body: {
+                        type: 1,
+                        templateId: 1,
+                        text: content,
+                    },
+                    cmid: d.toString(),
+                },
+            ],
+            type: 1,
+        };
+        this.msg = Message.AwesomeMessage.encode(data).finish().slice();
+        this.hex = [...this.msg]
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+    }
+
+    toArrayBuffer() {
+        return this.msg.buffer.slice(0, this.msg.byteLength);
+    }
+
+    send() {
+        unsafeWindow.ChatWebsocket.send(this);
+    }
 }
 
 
