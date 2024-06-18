@@ -282,7 +282,7 @@ class DOMApi {
         // 样式
         inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px; font-weight: bold; width: 200px;";
         inputTag.style.cssText = "margin-left: 2px; height: 33px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
-        if (area){
+        if (area) {
             inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px;position: relative;top: 13px; font-weight: bold;width:420px;";
         }
         return inputNameLabel;
@@ -327,6 +327,7 @@ class OperationPanel {
         // button
         this.batchPushBtn = null
         this.activeSwitchBtn = null
+        this.goldHunterSwitchBtn = null
         this.sendSelfGreetSwitchBtn = null
 
         // inputLab
@@ -354,6 +355,8 @@ class OperationPanel {
 
         // boss活跃度检测
         this.bossActiveState = true;
+        // 猎头过滤
+        this.goldHunterState = false;
         // 发送自定义招呼语
         this.sendSelfGreet = false;
 
@@ -445,6 +448,13 @@ class OperationPanel {
         // 默认开启活跃校验
         this.activeSwitchBtnHandler(this.bossActiveState)
 
+        // 过滤猎头
+        this.goldHunterSwitchBtn = DOMApi.createTag("div", "过滤猎头", btnCssText);
+        DOMApi.eventListener(this.goldHunterSwitchBtn, "click", () => {
+            this.goldHunterSwitchBtnHandler(!this.goldHunterState)
+        })
+        this.goldHunterSwitchBtnHandler(TampermonkeyApi.GmGetValue(ScriptConfig.FILTER_GOLD_HUNTER, false))
+
         // 2.创建筛选条件输入框并添加到input容器中
         this.cnInInputLab = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
         this.cnExInputLab = DOMApi.createInputTag("公司名排除", this.scriptConfig.getCompanyNameExclude());
@@ -515,8 +525,9 @@ class OperationPanel {
             })
             filter.appendChild(DOMApi.createTag("div", "", "clear:both"))
             cityAreaDropdown.appendChild(filter)
-            const bttt = [batchPushBtn, generateImgBtn, storeConfigBtn, this.activeSwitchBtn, this.sendSelfGreetSwitchBtn]
-            bttt.forEach(item => {
+            // 底部按钮组
+            const btnGroup = [batchPushBtn, generateImgBtn, storeConfigBtn, this.activeSwitchBtn, this.goldHunterSwitchBtn, this.sendSelfGreetSwitchBtn]
+            btnGroup.forEach(item => {
                 jobConditionWrapper.appendChild(item);
             })
             cityAreaDropdown.appendChild(operationPanel);
@@ -820,6 +831,20 @@ class OperationPanel {
         this.scriptConfig.setVal(ScriptConfig.ACTIVE_ENABLE, isOpen)
     }
 
+    goldHunterSwitchBtnHandler(isOpen) {
+        this.goldHunterState = isOpen;
+        if (this.goldHunterState) {
+            this.goldHunterSwitchBtn.innerText = "过滤猎头:已开启";
+            this.goldHunterSwitchBtn.style.backgroundColor = "rgb(215,254,195)";
+            this.goldHunterSwitchBtn.style.color = "rgb(2,180,6)";
+        } else {
+            this.goldHunterSwitchBtn.innerText = "过滤猎头:已关闭";
+            this.goldHunterSwitchBtn.style.backgroundColor = "rgb(251,224,224)";
+            this.goldHunterSwitchBtn.style.color = "rgb(254,61,61)";
+        }
+        this.scriptConfig.setVal(ScriptConfig.FILTER_GOLD_HUNTER, isOpen)
+    }
+
     sendSelfGreetSwitchBtnHandler(isOpen) {
         this.sendSelfGreet = isOpen;
         if (isOpen) {
@@ -859,6 +884,7 @@ class ScriptConfig extends TampermonkeyApi {
     static LOCAL_CONFIG = "config";
     static PUSH_COUNT = "pushCount:" + ScriptConfig.getCurDay();
     static ACTIVE_ENABLE = "activeEnable";
+    static FILTER_GOLD_HUNTER = "filterGoldHunter";
     static PUSH_LIMIT = "push_limit" + ScriptConfig.getCurDay();
     // 投递锁是否被占用，可重入；value表示当前正在投递的job
     static PUSH_LOCK = "push_lock";
@@ -1036,6 +1062,9 @@ class ScriptConfig extends TampermonkeyApi {
 
 class BossDOMApi {
 
+    static isGoldHunter(jobTag) {
+        return jobTag?.__vue__?.data?.goldHunter === 1
+    }
 
     static getJobList() {
         return document.querySelectorAll(".job-card-wrapper");
@@ -1479,6 +1508,14 @@ class JobListPageHandler {
     matchJob(jobTag) {
         let jobTitle = BossDOMApi.getJobTitle(jobTag);
         let pageCompanyName = BossDOMApi.getCompanyName(jobTag);
+
+        // 开启时过滤猎头
+        let filterGoldHunter = TampermonkeyApi.GmGetValue(ScriptConfig.FILTER_GOLD_HUNTER, false);
+        if (filterGoldHunter && BossDOMApi.isGoldHunter(jobTag)) {
+            logger.info("当前job被过滤：【" + jobTitle + "】 原因：过滤猎头")
+            return false;
+        }
+
 
         // 不满足配置公司名
         if (!Tools.fuzzyMatch(this.scriptConfig.getCompanyNameInclude(true),
