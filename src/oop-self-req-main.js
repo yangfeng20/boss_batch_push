@@ -266,11 +266,14 @@ class DOMApi {
         return htmlTag;
     }
 
-    static createInputTag(descName, valueStr) {
+    static createInputTag(descName, valueStr, area = false) {
         const inputNameLabel = document.createElement("label");
         inputNameLabel.textContent = descName;
-        const inputTag = document.createElement("input");
+        let inputTag = document.createElement("input");
         inputTag.type = "text";
+        if (area) {
+            inputTag = document.createElement("textarea");
+        }
         inputNameLabel.appendChild(inputTag);
         if (valueStr) {
             inputTag.value = valueStr;
@@ -278,12 +281,15 @@ class DOMApi {
 
         // 样式
         inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px; font-weight: bold; width: 200px;";
-        inputTag.style.cssText = "margin-left: 2px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
+        inputTag.style.cssText = "margin-left: 2px; height: 33px; width: 100%; padding: 5px; border-radius: 5px; border: 1px solid rgb(204, 204, 204); box-sizing: border-box;";
+        if (area){
+            inputNameLabel.style.cssText = "display: inline-block; margin: 0px 10px;position: relative;top: 13px; font-weight: bold;width:420px;";
+        }
         return inputNameLabel;
     }
 
     static getInputVal(inputLab) {
-        return inputLab.querySelector("input").value
+        return inputLab.querySelector("input,textarea")?.value
     }
 
     static eventListener(tag, eventType, func) {
@@ -446,8 +452,8 @@ class OperationPanel {
         this.jcExInputLab = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
-        this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet());
-        DOMApi.eventListener(this.selfGreetInputLab.querySelector("input"), "blur", () => {
+        this.selfGreetInputLab = DOMApi.createInputTag("自定义招呼语", this.scriptConfig.getSelfGreet(), true);
+        DOMApi.eventListener(this.selfGreetInputLab.querySelector("textarea"), "blur", () => {
             // 失去焦点，编辑的招呼语保存到内存中；用于msgPage每次实时获取到最新的，即便不保存
             ScriptConfig.setSelfGreetMemory(DOMApi.getInputVal(this.selfGreetInputLab))
         })
@@ -1329,7 +1335,7 @@ class JobListPageHandler {
                             form_uid: unsafeWindow._PAGE.uid.toString(),
                             to_uid: bossData.data.bossId.toString(),
                             to_name: jobDetail.encryptBossId,
-                            content: selfGreet.replace("\\n", "\n").replace(/<br[^>]*>/g, '\n')
+                            content: selfGreet.replaceAll("\\n", "\n").replace(/<br[^>]*>/g, '\n')
                         }).send()
                     }).catch(e => {
                         if (e instanceof FetchJobDetailFailExp) {
