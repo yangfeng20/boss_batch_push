@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.2.0
+// @version      1.2.1
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
