@@ -1397,7 +1397,7 @@ class JobListPageHandler {
             throw new FetchJobDetailFailExp(jobTitle, errorMsg || "获取boss数据重试多次失败");
         }
         const url = "https://www.zhipin.com/wapi/zpchat/geek/getBossData";
-        const token = unsafeWindow?._PAGE?.zp_token;
+        const token = unsafeWindow?._PAGE?.token;
         if (!token) {
             throw new FetchJobDetailFailExp(jobTitle, "未获取到zp-token");
         }
@@ -1469,7 +1469,7 @@ class JobListPageHandler {
 
                 this.operationPanel.refreshShow("正在投递-->" + jobTitle)
                 // 投递请求
-                axios.post(url, null, {headers: {"Zp_token": Tools.getCookieValue("geek_zp_token")}})
+                axios.post(url, null, {headers: {"zp_token": Tools.getCookieValue("bst")}})
                     .then(resp => {
                         if (resp.data.code === 1 && resp.data?.zpData?.bizData?.chatRemindDialog?.content) {
                             // 某些条件不满足，boss限制投递，无需重试，在结果处理器中处理
