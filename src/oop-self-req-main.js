@@ -337,6 +337,8 @@ class OperationPanel {
         this.cnExInputLab = null
         // job名称包含输入框lab
         this.jnInInputLab = null
+        // job名称排除输入框lab
+        this.jnExInputLab = null
         // job内容排除输入框lab
         this.jcExInputLab = null
         // 薪资范围输入框lab
@@ -459,6 +461,7 @@ class OperationPanel {
         this.cnInInputLab = DOMApi.createInputTag("公司名包含", this.scriptConfig.getCompanyNameInclude());
         this.cnExInputLab = DOMApi.createInputTag("公司名排除", this.scriptConfig.getCompanyNameExclude());
         this.jnInInputLab = DOMApi.createInputTag("工作名包含", this.scriptConfig.getJobNameInclude());
+        this.jnExInputLab = DOMApi.createInputTag("工作名排除", this.scriptConfig.getJobNameExclude());
         this.jcExInputLab = DOMApi.createInputTag("工作内容排除", this.scriptConfig.getJobContentExclude());
         this.srInInputLab = DOMApi.createInputTag("薪资范围", this.scriptConfig.getSalaryRange());
         this.csrInInputLab = DOMApi.createInputTag("公司规模范围", this.scriptConfig.getCompanyScaleRange());
@@ -474,6 +477,7 @@ class OperationPanel {
         inputContainerDiv.appendChild(this.cnInInputLab)
         inputContainerDiv.appendChild(this.cnExInputLab)
         inputContainerDiv.appendChild(this.jnInInputLab)
+        inputContainerDiv.appendChild(this.jnExInputLab)
         inputContainerDiv.appendChild(this.jcExInputLab)
         inputContainerDiv.appendChild(this.srInInputLab)
         inputContainerDiv.appendChild(this.csrInInputLab)
@@ -804,6 +808,7 @@ class OperationPanel {
         this.scriptConfig.setCompanyNameInclude(DOMApi.getInputVal(this.cnInInputLab))
         this.scriptConfig.setCompanyNameExclude(DOMApi.getInputVal(this.cnExInputLab))
         this.scriptConfig.setJobNameInclude(DOMApi.getInputVal(this.jnInInputLab))
+        this.scriptConfig.setJobNameExclude(DOMApi.getInputVal(this.jnExInputLab))
         this.scriptConfig.setJobContentExclude(DOMApi.getInputVal(this.jcExInputLab))
         this.scriptConfig.setSalaryRange(DOMApi.getInputVal(this.srInInputLab))
         this.scriptConfig.setCompanyScaleRange(DOMApi.getInputVal(this.csrInInputLab))
@@ -898,6 +903,8 @@ class ScriptConfig extends TampermonkeyApi {
     static cnExKey = "companyNameExclude"
     // job名称包含输入框lab
     static jnInKey = "jobNameInclude"
+    // job名称排除输入框lab
+    static jnExKey = "jobNameExclude"
     // job内容排除输入框lab
     static jcExKey = "jobContentExclude"
     // 薪资范围输入框lab
@@ -978,6 +985,10 @@ class ScriptConfig extends TampermonkeyApi {
         return this.getArrConfig(ScriptConfig.jnInKey, isArr);
     }
 
+    getJobNameExclude(isArr) {
+        return this.getArrConfig(ScriptConfig.jnExKey, isArr);
+    }
+
 
     getSalaryRange() {
         return this.getStrConfig(ScriptConfig.srInKey);
@@ -1002,6 +1013,10 @@ class ScriptConfig extends TampermonkeyApi {
 
     setJobNameInclude(val) {
         this.configObj[ScriptConfig.jnInKey] = val.split(",");
+    }
+
+    setJobNameExclude(val) {
+        this.configObj[ScriptConfig.jnExKey] = val.split(",");
     }
 
     setJobContentExclude(val) {
@@ -1539,6 +1554,14 @@ class JobListPageHandler {
             pageJobName, true)) {
             logger.debug("当前工作名：" + pageJobName)
             logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足配置工作名")
+            return false;
+        }
+
+        // 满足排除工作名
+        if (Tools.fuzzyMatch(this.scriptConfig.getJobNameExclude(true),
+            pageJobName, false)) {
+            logger.debug("当前工作名：" + pageJobName)
+            logger.info("当前job被过滤：【" + jobTitle + "】 原因：满足排除工作名")
             return false;
         }
 
