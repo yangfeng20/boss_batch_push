@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.2.1
+// @version      1.2.3
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -1131,6 +1131,11 @@ class BossDOMApi {
      * @param jobTag
      */
     static isNotCommunication(jobTag) {
+        const key = BossDOMApi.getUniqueKey(jobTag)
+        if (JobListPageHandler.cache.get(key)?.haveContacted){
+            return false;
+        }
+
         const jobStatusStr = jobTag.querySelector(".start-chat-btn").innerText;
         return jobStatusStr.includes("立即沟通");
     }
@@ -1165,6 +1170,8 @@ class BossDOMApi {
 
 class JobListPageHandler {
 
+    static cache = new Map()
+
     constructor() {
         this.operationPanel = new OperationPanel(this);
         this.scriptConfig = this.operationPanel.scriptConfig
@@ -1172,7 +1179,6 @@ class JobListPageHandler {
         this.publishState = false
         this.nextPage = false
         this.mock = false
-        this.cache = new Map()
         this.selfDefCount = -1
     }
 
@@ -1300,11 +1306,11 @@ class JobListPageHandler {
     }
 
     cacheClear() {
-        this.cache.clear()
+        JobListPageHandler.cache.clear()
     }
 
     cacheSize() {
-        return this.cache.size
+        return JobListPageHandler.cache.size
     }
 
     reqJobDetail(jobTag, retries = 3) {
@@ -1312,17 +1318,14 @@ class JobListPageHandler {
             if (retries === 0) {
                 return reject(new FetchJobDetailFailExp());
             }
-            // todo 如果在投递当前页中，点击停止投递，那么当前页重新投递的话，会将已经投递的再重新投递一遍
-            //  原因是没有重新获取数据；沟通状态还是立即沟通，实际已经投递过一遍，已经为继续沟通
-            //  暂时不影响逻辑，重复投递，boss自己会过滤，不会重复发送消息；发送自定义招呼语也没问题；油猴会过滤【oldVal===newVal】的数据，也就不会重复发送自定义招呼语
             const key = BossDOMApi.getUniqueKey(jobTag)
-            if (this.cache.has(key)) {
-                return resolve(this.cache.get(key))
+            if (JobListPageHandler.cache.has(key)) {
+                return resolve(JobListPageHandler.cache.get(key))
             }
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
             axios.get("https://www.zhipin.com/wapi/zpgeek/job/card.json?" + params, {timeout: 5000})
                 .then(resp => {
-                    this.cache.set(key, resp.data.zpData.jobCard)
+                    JobListPageHandler.cache.set(key, resp.data.zpData.jobCard)
                     return resolve(resp.data.zpData.jobCard);
                 }).catch(error => {
                 logger.debug("获取详情页异常正在重试:", error)
@@ -1368,6 +1371,11 @@ class JobListPageHandler {
                 ScriptConfig.pushCountIncr()
                 publishResultCount.successCount++
                 logger.info("投递成功：" + BossDOMApi.getJobTitle(jobTag))
+
+                const key = BossDOMApi.getUniqueKey(jobTag)
+                if (JobListPageHandler.cache.has(key)) {
+                    JobListPageHandler.cache.get(key).haveContacted = true
+                }
 
                 // 通过websocket发送自定义消息
                 if (TampermonkeyApi.GmGetValue(ScriptConfig.SEND_SELF_GREET_ENABLE, false) &&
