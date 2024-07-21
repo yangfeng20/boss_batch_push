@@ -72,6 +72,13 @@
 
 ### 更新内容
 
+##### 2024-07-21/[chenli1107](https://github.com/chenli1107) and [yangfeng20](https://github.com/yangfeng20)
+- 添加过滤条件：工作名排除
+- 修复重复投递导致的重复发送自定义招呼语问题
+
+##### 2024-07-18/[iekrwh](https://github.com/Iekrwh)
+- token字段更改（boss更新了,解决投递失败问题【请求不合法】）
+
 ##### 2024-06-10/yangfeng20
 
 - 修复自定义招呼语重复发送问题（websocket）
