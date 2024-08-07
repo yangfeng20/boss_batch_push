@@ -1420,7 +1420,7 @@ class JobListPageHandler {
             throw new FetchJobDetailFailExp(jobTitle, errorMsg || "获取boss数据重试多次失败");
         }
         const url = "https://www.zhipin.com/wapi/zpchat/geek/getBossData";
-        const token = unsafeWindow?._PAGE?.token;
+        const token = Tools.getCookieValue("bst");
         if (!token) {
             throw new FetchJobDetailFailExp(jobTitle, "未获取到zp-token");
         }
