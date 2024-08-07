@@ -72,7 +72,7 @@
 
 ### 更新内容
 
-##### 2024-07-21/[yangfeng20](https://github.com/yangfeng20)
+##### 2024-08-07/[yangfeng20](https://github.com/yangfeng20)
 - 发送自定义招呼语识别问题
   - 07-18的提交，通过window._PAGE.token。在当时是可行的。但现在失效了。
 
