@@ -72,6 +72,10 @@
 
 ### 更新内容
 
+##### 2024-07-21/[yangfeng20](https://github.com/yangfeng20)
+- 发送自定义招呼语识别问题
+  - 07-18的提交，通过window._PAGE.token。在当时是可行的。但现在失效了。
+
 ##### 2024-07-21/[chenli1107](https://github.com/chenli1107) and [yangfeng20](https://github.com/yangfeng20)
 - 添加过滤条件：工作名排除
 - 修复重复投递导致的重复发送自定义招呼语问题
