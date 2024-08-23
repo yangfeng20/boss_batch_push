@@ -8,7 +8,7 @@
 // @run-at       document-start
 // @match        https://www.zhipin.com/*
 // @connect      www.tl.beer
-// @include      https://www.zhipin.com
+
 // @require      https://unpkg.com/maple-lib@1.0.3/log.js
 // @require      https://cdn.jsdelivr.net/npm/axios@1.1.2/dist/axios.min.js
 // @require      https://cdn.jsdelivr.net/npm/js2wordcloud@1.1.12/dist/js2wordcloud.min.js
