@@ -2,7 +2,7 @@
 // @name         Boss Batch Push [Boss直聘批量投简历]
 // @description  boss直聘批量简历投递
 // @namespace    maple
-// @version      1.2.4
+// @version      1.2.5
 // @author       maple,Ocyss
 // @license      Apache License 2.0
 // @run-at       document-start
@@ -1129,6 +1129,7 @@ class BossDOMApi {
     /**
      * 是否为未沟通
      * @param jobTag
+     * @deprecated
      */
     static isNotCommunication(jobTag) {
         const key = BossDOMApi.getUniqueKey(jobTag)
@@ -1138,6 +1139,14 @@ class BossDOMApi {
 
         const jobStatusStr = jobTag.querySelector(".start-chat-btn").innerText;
         return jobStatusStr.includes("立即沟通");
+    }
+
+    /**
+     * 是否投递过
+     * @param jobCardJson
+     */
+    static isCommunication(jobCardJson) {
+        return jobCardJson?.friendStatus === 1;
     }
 
     static getJobDetailUrlParams(jobTag) {
@@ -1251,7 +1260,7 @@ class JobListPageHandler {
             let jobTitle = BossDOMApi.getJobTitle(jobTag);
             return promiseChain
                 .then(() => this.matchJobPromise(jobTag))
-                .then(() => this.reqJobDetail(jobTag))
+                .then(() => this.reqJobDetail(jobTag, 2, false))
                 .then(jobCardJson => this.jobDetailFilter(jobTag, jobCardJson))
                 .then(() => this.sendPublishReq(jobTag))
                 .then(publishResult => this.handlerPublishResult(jobTag, publishResult, publishResultCount))
@@ -1313,13 +1322,13 @@ class JobListPageHandler {
         return JobListPageHandler.cache.size
     }
 
-    reqJobDetail(jobTag, retries = 3) {
+    reqJobDetail(jobTag, retries = 3, useCache = true) {
         return new Promise((resolve, reject) => {
             if (retries === 0) {
                 return reject(new FetchJobDetailFailExp());
             }
             const key = BossDOMApi.getUniqueKey(jobTag)
-            if (JobListPageHandler.cache.has(key)) {
+            if (useCache && JobListPageHandler.cache.has(key)) {
                 return resolve(JobListPageHandler.cache.get(key))
             }
             let params = BossDOMApi.getJobDetailUrlParams(jobTag);
@@ -1338,6 +1347,12 @@ class JobListPageHandler {
         let jobTitle = BossDOMApi.getJobTitle(jobTag);
 
         return new Promise((resolve, reject) => {
+
+            // 是否沟通过
+            if (BossDOMApi.isCommunication(jobCardJson)) {
+                logger.info("当前job被过滤：【" + jobTitle + "】 原因：已经沟通过")
+                return reject(new JobNotMatchExp())
+            }
 
             // 工作详情活跃度检查
             let activeCheck = TampermonkeyApi.GmGetValue(ScriptConfig.ACTIVE_ENABLE, true);
@@ -1587,11 +1602,6 @@ class JobListPageHandler {
         if (!Tools.rangeMatch(pageCompanyScaleRange, BossDOMApi.getCompanyScaleRange(jobTag))) {
             logger.debug("当前公司规模范围：" + pageCompanyScaleRange)
             logger.info("当前job被过滤：【" + jobTitle + "】 原因：不满足公司规模范围")
-            return false;
-        }
-
-        if (!BossDOMApi.isNotCommunication(jobTag)) {
-            logger.info("当前job被过滤：【" + jobTitle + "】 原因：已经沟通过")
             return false;
         }
 

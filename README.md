@@ -72,6 +72,13 @@
 
 ### 更新内容
 
+##### 2024-12-03/[yangfeng20](https://github.com/yangfeng20)
+- 修复偶现的自定义招呼语重复发送问题，投递次数计算问题（重复投递导致）。
+  - boss更新了，列表页面点击投递，也还是会显示立即投递，不会变更为继续沟通了，不清楚是不是boss的bug。
+  - 同时接口的字段也修改了，沟通过的字段由【haveContacted】改为了【friendStatus】。
+  - 感谢[RickieWen](https://github.com/RickieWen)的辅助调试测试。
+  - 如果有问题，请携带详细信息反馈。
+
 ##### 2024-08-07/[yangfeng20](https://github.com/yangfeng20)
 - 发送自定义招呼语识别问题
   - 07-18的提交，通过window._PAGE.token。在当时是可行的。但现在失效了。
