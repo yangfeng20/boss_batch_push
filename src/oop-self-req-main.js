@@ -601,6 +601,13 @@ class OperationPanel {
 
         docDiv.appendChild(title)
         docDiv.appendChild(txtDiv)
+        const explainTag = document.createElement("p");
+        explainTag.innerHTML = `<span style="color: red;font-size: 15px;">BOSS直聘更新了，发送自定义招呼语功能不可用。作者在另一个脚本中更新修复了该功能，并且其他功能也有更新增强，请移步到</span>
+                                <br/><a style="color: #30a491" href='https://gitee.com/yangfeng20/ai-job/raw/master/ai-job-hunting.user.js'>
+                                点击安装【AI工作猎手: ai坐席自动回复，图片简历，ai招呼语，拒绝挽留，自动发送简历，自动交换联系方式，批量投递...】</a><br/>
+                                <span style="color: red;font-size: 15px;">安装完成后请在油猴脚本管理中关闭本插件</span>`;
+        txtDiv.appendChild(explainTag)
+
         this.docTextArr.forEach(doc => {
             const textTag = document.createElement("p");
             textTag.style.color = "#666";
