@@ -1,8 +1,15 @@
 ## Boss Batch Push
 
-<hr>
+> [!CAUTION]
+> Boss直聘新推出了职位页面
+> 
+> 本项目未对新的页面进行适配
+> 
+> 新的项目进行了适配，请迁移至新项目使用
+> 
+> AI工作猎手 【原有基础上增加了多种AI功能，快速、简单、易用；帮助您快速找到工作！】
 
-## 找工作神器推荐：AI工作猎手
+## AI工作猎手
  ### [Github AI工作猎手](https://github.com/yangfeng20/ai-job)
  ### [Gitee AI工作猎手](https://gitee.com/yangfeng20/ai-job)
 
