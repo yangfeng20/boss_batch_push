@@ -9,6 +9,13 @@
 > 
 > AI工作猎手 👇【原有基础上增加了多种AI功能，快速、简单、易用；帮助您快速找到工作！】
 
+> [!TIP]
+> **投出去只是上半场, 面试才是决定 Offer 的下半场。**
+>
+> [beacon 灯塔](https://github.com/yangfeng20/beacon): 同作者的 AI 面试助手, 装完就能用。面试全程记录 + 自动复盘报告 + 拿你自己的简历做模拟面试。
+
+<br/>
+
 ## AI工作猎手
  ### [Github AI工作猎手](https://github.com/yangfeng20/ai-job)
  ### [Gitee AI工作猎手](https://gitee.com/yangfeng20/ai-job)
